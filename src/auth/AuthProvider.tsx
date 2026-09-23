@@ -23,6 +23,11 @@ const native = Capacitor.isNativePlatform();
 const authority = `https://login.microsoftonline.com/${encodeURIComponent(tenantId || "organizations")}`;
 const redirectUri =
   import.meta.env.VITE_MICROSOFT_REDIRECT_URI || `${window.location.origin}/`;
+const apiUrl = import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, "");
+// The backend verifies identity by calling Microsoft Graph with this token.
+const graphScopes = ["User.Read"];
+const saveUserError =
+  "You are signed in, but your account could not be saved to AGS. Refresh the page or sign in again.";
 const demoEnabled =
   import.meta.env.VITE_ENABLE_DEMO === "true" ||
   (import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO !== "false");
@@ -56,6 +61,30 @@ const ready = msal
 // The provider handles the error; attach a handler immediately to avoid an unhandled rejection.
 void ready.catch(() => undefined);
 
+// Creates or refreshes the signed-in user in the AGS backend.
+async function saveUser(accessToken: string) {
+  if (!apiUrl) return;
+  const response = await fetch(`${apiUrl}/api/users`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error);
+}
+
+// Runs once per page load, including restored sessions, so StrictMode cannot call it twice.
+// Sign-in failures are reported through `ready`, not as a failed save.
+const webUserSaved = ready
+  .catch(() => null)
+  .then(async (account) => {
+    if (!account || !msal || !apiUrl) return;
+    const { accessToken } = await msal.acquireTokenSilent({
+      scopes: graphScopes,
+    });
+    await saveUser(accessToken);
+  });
+void webUserSaved.catch(() => undefined);
+
 const AuthContext = createContext<Auth | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -79,6 +108,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => {
         if (active) setLoading(false);
       });
+    // Saving the user does not block the workspace; failures are shown as a notice.
+    webUserSaved.catch(() => {
+      if (active) setError(saveUserError);
+    });
     return () => {
       active = false;
     };
@@ -116,10 +149,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: result.mail || result.userPrincipalName || "",
         });
         setDemo(false);
+        const accessToken: unknown = result.access_token_response?.access_token;
+        if (typeof accessToken !== "string") setError(saveUserError);
+        else void saveUser(accessToken).catch(() => setError(saveUserError));
       } else if (msal) {
         await ready;
         await msal.loginRedirect({
-          scopes: ["openid", "profile", "email"],
+          scopes: ["openid", "profile", "email", ...graphScopes],
           prompt: "select_account",
         });
       }
