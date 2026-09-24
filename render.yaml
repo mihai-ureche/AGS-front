@@ -13,8 +13,6 @@ services:
         sync: false
       - key: VITE_API_URL
         sync: false
-      - key: VITE_ENABLE_DEMO
-        value: "false"
     routes:
       - type: rewrite
         source: /*

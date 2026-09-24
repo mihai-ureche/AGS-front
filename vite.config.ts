@@ -10,7 +10,6 @@ export default defineConfig({
         manualChunks: {
           charts: ["recharts"],
           microsoft: ["@azure/msal-browser"],
-          ionic: ["@ionic/react"],
         },
       },
     },
