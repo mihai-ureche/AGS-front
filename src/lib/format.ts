@@ -1,13 +1,22 @@
-// Borg values are in Romanian lei.
-export const CURRENCY = "RON";
-const locale = "en-GB";
+import type { Currency } from "./currency";
 
-const moneyFormat = new Intl.NumberFormat(locale, {
-  style: "currency",
-  currency: CURRENCY,
-  maximumFractionDigits: 2,
-  minimumFractionDigits: 2,
-});
+export const locale = "ro-RO";
+
+const moneyFormat = (currency: Currency, compact = false) =>
+  new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    // "lei" and "€" read more naturally in Romanian than "RON" and "EUR".
+    currencyDisplay: "narrowSymbol",
+    ...(compact
+      ? { notation: "compact", maximumFractionDigits: 1 }
+      : { maximumFractionDigits: 2, minimumFractionDigits: 2 }),
+  });
+const moneyFormats = { RON: moneyFormat("RON"), EUR: moneyFormat("EUR") };
+const compactMoneyFormats = {
+  RON: moneyFormat("RON", true),
+  EUR: moneyFormat("EUR", true),
+};
 const compactFormat = new Intl.NumberFormat(locale, {
   notation: "compact",
   maximumFractionDigits: 1,
@@ -15,20 +24,40 @@ const compactFormat = new Intl.NumberFormat(locale, {
 const numberFormat = new Intl.NumberFormat(locale, {
   maximumFractionDigits: 2,
 });
+const fixedFormat = (digits: number) =>
+  new Intl.NumberFormat(locale, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
 
-export const money = (value: number) => moneyFormat.format(value);
-export const compactMoney = (value: number) =>
+/** Formats an amount that is already in `currency`; see useCurrency for lei amounts. */
+export const formatMoney = (value: number, currency: Currency) =>
+  moneyFormats[currency].format(value);
+export const formatCompactMoney = (value: number, currency: Currency) =>
   Math.abs(value) < 10_000
-    ? money(value)
-    : `${CURRENCY} ${compactFormat.format(value)}`;
+    ? formatMoney(value, currency)
+    : compactMoneyFormats[currency].format(value);
 export const compact = (value: number) => compactFormat.format(value);
 export const number = (value: number) => numberFormat.format(value);
+
+/**
+ * A count with its noun: "1 linie", "19 linii", "20 de linii", "101 linii".
+ * Romanian adds "de" from 20 on, unless the last two digits are 01–19.
+ */
+export function plural(value: number, one: string, many: string) {
+  if (value === 1) return `1 ${one}`;
+  const rest = Math.abs(value) % 100;
+  const de = Math.abs(value) >= 20 && (rest === 0 || rest >= 20);
+  return `${number(value)} ${de ? "de " : ""}${many}`;
+}
 export const percent = (value: number | null, digits = 1) =>
-  value === null || !Number.isFinite(value) ? "—" : `${value.toFixed(digits)}%`;
+  value === null || !Number.isFinite(value)
+    ? "—"
+    : `${fixedFormat(digits).format(value)}%`;
 
 export function signedPercent(value: number | null) {
   if (value === null || !Number.isFinite(value)) return "—";
-  return `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(value).toFixed(1)}%`;
+  return `${value > 0 ? "+" : value < 0 ? "−" : ""}${fixedFormat(1).format(Math.abs(value))}%`;
 }
 
 export function change(current: number, previous: number): number | null {
@@ -36,6 +65,10 @@ export function change(current: number, previous: number): number | null {
     ? null
     : ((current - previous) / Math.abs(previous)) * 100;
 }
+
+/** Romanian writes weekdays and months in lowercase; labels start with a capital. */
+export const capitalize = (text: string) =>
+  text.charAt(0).toLocaleUpperCase(locale) + text.slice(1);
 
 export function shortDate(iso: string) {
   return new Date(`${iso}T12:00:00`).toLocaleDateString(locale, {
@@ -77,7 +110,7 @@ export function relativeTime(iso: string, now = Date.now()) {
     if (Math.abs(seconds) >= size)
       return rtf.format(Math.round(seconds / size), unit);
   }
-  return "just now";
+  return "chiar acum";
 }
 
 export function initials(name: string) {

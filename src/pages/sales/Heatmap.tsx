@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { money, number } from "../../lib/format";
+import { useCurrency } from "../../lib/currency";
+import { number } from "../../lib/format";
 import { heatmap, metricOptions } from "../../lib/sales";
 import type { MetricKey, SaleLine } from "../../lib/sales";
 
@@ -14,6 +15,7 @@ export function Heatmap({
   lines: SaleLine[];
   metric: MetricKey;
 }) {
+  const { money } = useCurrency();
   const map = useMemo(() => heatmap(lines, metric), [lines, metric]);
   const [hover, setHover] = useState<{ day: number; hour: number } | null>(
     null,
@@ -38,17 +40,17 @@ export function Heatmap({
     <section className="panel" aria-labelledby="heatmap-title">
       <div className="panel-heading">
         <div>
-          <h2 id="heatmap-title">When sales happen</h2>
+          <h2 id="heatmap-title">Când au loc vânzările</h2>
           <p>
-            {metricInfo.label} by weekday and hour the document was issued
+            {metricInfo.label} după ziua săptămânii și ora emiterii documentului
             {map.timedShare < 0.99 &&
-              ` · ${Math.round(map.timedShare * 100)}% of lines have a time`}
+              ` · ${Math.round(map.timedShare * 100)}% din linii au oră`}
           </p>
         </div>
         {readout && (
           <p className="heatmap-readout" aria-live="polite">
             <span>
-              {hover ? "" : "Peak · "}
+              {hover ? "" : "Vârf · "}
               {map.weekdays[readout.day]} {hourLabel(readout.hour)}
             </span>
             <strong>{format(map.values[readout.day]![readout.hour]!)}</strong>
@@ -59,7 +61,7 @@ export function Heatmap({
         <div
           className="heatmap"
           role="table"
-          aria-label="Sales by weekday and hour"
+          aria-label="Vânzări după ziua săptămânii și oră"
           onPointerLeave={() => setHover(null)}
         >
           <div role="row" className="heatmap-hours">
@@ -87,11 +89,11 @@ export function Heatmap({
         </div>
       </div>
       <div className="heat-legend" aria-hidden="true">
-        <span>Less</span>
+        <span>Mai puțin</span>
         {Array.from({ length: STEPS + 1 }, (_, index) => (
           <i key={index} className={`heat-cell heat-${index}`} />
         ))}
-        <span>More</span>
+        <span>Mai mult</span>
       </div>
     </section>
   );

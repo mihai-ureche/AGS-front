@@ -40,8 +40,8 @@ export function LoadingScreen() {
   return (
     <GateLayout>
       <div className="gate-loading">
-        <Spinner label="Opening AGS" />
-        <p>Opening your workspace…</p>
+        <Spinner label="Se deschide AGS" />
+        <p>Se deschide spațiul de lucru…</p>
       </div>
     </GateLayout>
   );
@@ -50,10 +50,10 @@ export function LoadingScreen() {
 export function SetupScreen() {
   return (
     <GateLayout>
-      <h1>Configuration needed</h1>
+      <h1>Configurare necesară</h1>
       <p>
-        This build is missing public settings. Add them to <code>.env</code> (or
-        the Render environment) and rebuild.
+        Acestei versiuni îi lipsesc setări publice. Adăugați-le în{" "}
+        <code>.env</code> (sau în mediul Render) și reconstruiți aplicația.
       </p>
       <ul className="config-list">
         {missingConfig.map((name) => (
@@ -71,10 +71,10 @@ export function LoginScreen({ error }: { error?: string }) {
   const [busy, setBusy] = useState(false);
   return (
     <GateLayout>
-      <h1>Sign in</h1>
+      <h1>Autentificare</h1>
       <p>
-        Use your organization's Microsoft work account. What you can see depends
-        on the role and entities an administrator assigned to you.
+        Folosiți contul Microsoft de serviciu al organizației. Ce puteți vedea
+        depinde de rolul și entitățile alocate de un administrator.
       </p>
       {error && <Alert tone="error">{error}</Alert>}
       <button
@@ -86,12 +86,12 @@ export function LoginScreen({ error }: { error?: string }) {
         }}
       >
         <MicrosoftMark />
-        {busy ? "Redirecting…" : "Continue with Microsoft"}
+        {busy ? "Redirecționare…" : "Continuați cu Microsoft"}
         <ArrowRight size={17} />
       </button>
       <p className="gate-footnote">
-        <ShieldCheck size={15} /> Sign-in happens on Microsoft's site. AGS never
-        sees your password.
+        <ShieldCheck size={15} /> Autentificarea are loc pe site-ul Microsoft.
+        AGS nu vă vede niciodată parola.
       </p>
     </GateLayout>
   );
@@ -111,7 +111,7 @@ export function BlockedScreen({
       <span className="gate-icon gate-icon-warning">
         <AlertTriangle size={22} />
       </span>
-      <h1>{tone === "blocked" ? "Access refused" : "AGS is unavailable"}</h1>
+      <h1>{tone === "blocked" ? "Acces refuzat" : "AGS nu este disponibil"}</h1>
       <p>{message}</p>
       <div className="gate-actions">
         <button
@@ -122,13 +122,14 @@ export function BlockedScreen({
             void reload().finally(() => setBusy(false));
           }}
         >
-          <RefreshCw size={15} className={busy ? "spin" : ""} /> Try again
+          <RefreshCw size={15} className={busy ? "spin" : ""} /> Încercați din
+          nou
         </button>
         <button
           className="button button-secondary"
           onClick={() => void logout()}
         >
-          <LogOut size={15} /> Sign out
+          <LogOut size={15} /> Deconectare
         </button>
       </div>
     </GateLayout>
@@ -145,20 +146,20 @@ export function NoAccessScreen() {
       <span className="gate-icon">
         <KeyRound size={22} />
       </span>
-      <h1>Waiting for access</h1>
+      <h1>Se așteaptă accesul</h1>
       <p>
-        You're signed in as <strong>{me.email ?? me.displayName}</strong> with
-        the <code>{me.role}</code> role, which doesn't include sales or
-        administration. Ask an administrator to assign you a role.
+        Sunteți autentificat ca <strong>{me.email ?? me.displayName}</strong> cu
+        rolul <code>{me.role}</code>, care nu include vânzări sau administrare.
+        Cereți unui administrator să vă aloce un rol.
       </p>
       <div className="id-box">
         <span>
-          <small>Your AGS user ID</small>
+          <small>ID-ul dumneavoastră de utilizator AGS</small>
           <code>{profile.id}</code>
         </span>
         <button
           className="icon-button"
-          aria-label="Copy user ID"
+          aria-label="Copiați ID-ul de utilizator"
           onClick={() => {
             void navigator.clipboard
               ?.writeText(profile.id)
@@ -169,8 +170,8 @@ export function NoAccessScreen() {
         </button>
       </div>
       <p className="gate-note">
-        {copied ? "Copied. " : ""}Setting up the first administrator? Run{" "}
-        <code>npm run user:role -- {profile.id} admin</code> in AGS-backend.
+        {copied ? "Copiat. " : ""}Configurați primul administrator? Rulați{" "}
+        <code>npm run user:role -- {profile.id} admin</code> în AGS-backend.
       </p>
       <div className="gate-actions">
         <button
@@ -181,13 +182,14 @@ export function NoAccessScreen() {
             void reload().finally(() => setBusy(false));
           }}
         >
-          <RefreshCw size={15} className={busy ? "spin" : ""} /> Check again
+          <RefreshCw size={15} className={busy ? "spin" : ""} /> Verificați din
+          nou
         </button>
         <button
           className="button button-secondary"
           onClick={() => void logout()}
         >
-          <LogOut size={15} /> Sign out
+          <LogOut size={15} /> Deconectare
         </button>
       </div>
     </GateLayout>

@@ -1,5 +1,6 @@
 import { eachDay, parseIso, weekStart } from "./dates";
 import type { DateRange } from "./dates";
+import { capitalize, locale } from "./format";
 
 /** A Borg product line (`/api2/borg/sales`), normalized from its camelCase JSON. */
 export interface SaleLine {
@@ -14,6 +15,8 @@ export interface SaleLine {
   hour: number | null;
   warehouseId: number | null;
   warehouse: string;
+  /** Borg's client ID; tells apart clients that share a name. */
+  clientId: string | null;
   client: string;
   clientTaxId: string | null;
   operator: string;
@@ -88,6 +91,7 @@ export function normalizeLine(
     warehouse:
       text(raw.depozit) ??
       (text(raw.gestiuneId) ? `#${text(raw.gestiuneId)}` : NONE),
+    clientId: text(raw.clientId),
     client: text(raw.client) ?? NONE,
     clientTaxId: text(raw.clientCodFiscal),
     operator: text(raw.operator) ?? NONE,
@@ -117,8 +121,8 @@ export function normalizeLines(rows: Record<string, unknown>[]) {
 }
 
 export const docTypeLabels: Record<string, string> = {
-  BFD: "Receipts (BFD)",
-  AIM: "Delivery notes (AIM)",
+  BFD: "Bonuri fiscale (BFD)",
+  AIM: "Avize (AIM)",
 };
 
 export function documentLabel(line: SaleLine) {
@@ -129,7 +133,7 @@ export function documentLabel(line: SaleLine) {
 // ---------------------------------------------------------------------------
 // Dimensions
 
-const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const weekdays = ["Lun", "Mar", "Mie", "Joi", "Vin", "Sâm", "Dum"];
 export const weekdayOf = (iso: string) => (parseIso(iso).getDay() + 6) % 7;
 
 export type Dimension =
@@ -160,30 +164,41 @@ type DimensionSpec = {
 
 export const dimensions: Record<Dimension, DimensionSpec> = {
   product: {
-    label: "Product",
+    label: "Produs",
     key: (line) => line.productCode || line.product,
     name: (line) =>
       line.productCode ? `${line.product} · ${line.productCode}` : line.product,
     filterable: true,
   },
   category: {
-    label: "Category",
+    label: "Categorie",
     key: (line) => line.category,
     filterable: true,
   },
   warehouse: {
-    label: "Warehouse",
+    label: "Depozit",
     key: (line) => line.warehouse,
     filterable: true,
   },
   docType: {
-    label: "Document type",
+    label: "Tip document",
     key: (line) => line.docType,
     name: (line) => docTypeLabels[line.docType] ?? line.docType,
     filterable: true,
   },
-  channel: { label: "Channel", key: (line) => line.channel, filterable: true },
-  client: { label: "Client", key: (line) => line.client, filterable: true },
+  channel: { label: "Canal", key: (line) => line.channel, filterable: true },
+  client: {
+    label: "Client",
+    key: (line) =>
+      line.clientId
+        ? `id:${line.clientId}`
+        : line.clientTaxId
+          ? `cf:${line.clientTaxId}`
+          : line.client,
+    name: (line) =>
+      line.clientTaxId ? `${line.client} · ${line.clientTaxId}` : line.client,
+    filterable: true,
+  },
   operator: {
     label: "Operator",
     key: (line) => line.operator,
@@ -191,31 +206,35 @@ export const dimensions: Record<Dimension, DimensionSpec> = {
   },
   agent: { label: "Agent", key: (line) => line.agent, filterable: true },
   vatRate: {
-    label: "VAT rate",
+    label: "Cotă TVA",
     key: (line) => (line.vatRate === null ? NONE : String(line.vatRate)),
     name: (line) => (line.vatRate === null ? NONE : `${line.vatRate}%`),
     filterable: true,
   },
-  day: { label: "Day", key: (line) => line.date, ordered: true },
-  week: { label: "Week", key: (line) => weekStart(line.date), ordered: true },
+  day: { label: "Zi", key: (line) => line.date, ordered: true },
+  week: {
+    label: "Săptămână",
+    key: (line) => weekStart(line.date),
+    ordered: true,
+  },
   month: {
-    label: "Month",
+    label: "Lună",
     key: (line) => line.date.slice(0, 7),
     ordered: true,
   },
   weekday: {
-    label: "Weekday",
+    label: "Zi a săptămânii",
     key: (line) => String(weekdayOf(line.date)),
     name: (line) => weekdays[weekdayOf(line.date)]!,
     ordered: true,
   },
   hour: {
-    label: "Hour of day",
+    label: "Oră din zi",
     key: (line) =>
       line.hour === null ? "99" : String(line.hour).padStart(2, "0"),
     name: (line) =>
       line.hour === null
-        ? "Unknown"
+        ? "Necunoscută"
         : `${String(line.hour).padStart(2, "0")}:00`,
     ordered: true,
   },
@@ -231,18 +250,22 @@ function nameFor(dimension: Dimension, line: SaleLine) {
   if (spec.name) return spec.name(line);
   const key = spec.key(line);
   if (dimension === "day")
-    return new Date(`${key}T12:00:00`).toLocaleDateString("en-GB", {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-    });
+    return capitalize(
+      new Date(`${key}T12:00:00`).toLocaleDateString(locale, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      }),
+    );
   if (dimension === "week")
-    return `Week of ${new Date(`${key}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
+    return `Săptămâna din ${new Date(`${key}T12:00:00`).toLocaleDateString(locale, { day: "numeric", month: "short" })}`;
   if (dimension === "month")
-    return new Date(`${key}-01T12:00:00`).toLocaleDateString("en-GB", {
-      month: "long",
-      year: "numeric",
-    });
+    return capitalize(
+      new Date(`${key}-01T12:00:00`).toLocaleDateString(locale, {
+        month: "long",
+        year: "numeric",
+      }),
+    );
   return key;
 }
 
@@ -342,11 +365,11 @@ export const metricOptions: {
   label: string;
   money: boolean;
 }[] = [
-  { key: "net", label: "Net sales", money: true },
-  { key: "gross", label: "Gross sales (incl. VAT)", money: true },
-  { key: "margin", label: "Gross margin", money: true },
-  { key: "quantity", label: "Quantity", money: false },
-  { key: "documents", label: "Documents", money: false },
+  { key: "net", label: "Vânzări nete", money: true },
+  { key: "gross", label: "Vânzări brute (cu TVA)", money: true },
+  { key: "margin", label: "Marjă brută", money: true },
+  { key: "quantity", label: "Cantitate", money: false },
+  { key: "documents", label: "Documente", money: false },
 ];
 export const metricValue = (metrics: Metrics, key: MetricKey) => metrics[key];
 
@@ -470,12 +493,12 @@ export function bucketsFor(range: DateRange, bucket: Bucket) {
 
 export function bucketLabel(bucket: Bucket, key: string) {
   if (bucket === "month") {
-    return new Date(`${key}-01T12:00:00`).toLocaleDateString("en-GB", {
+    return new Date(`${key}-01T12:00:00`).toLocaleDateString(locale, {
       month: "short",
       year: "2-digit",
     });
   }
-  return new Date(`${key}T12:00:00`).toLocaleDateString("en-GB", {
+  return new Date(`${key}T12:00:00`).toLocaleDateString(locale, {
     day: "numeric",
     month: "short",
   });

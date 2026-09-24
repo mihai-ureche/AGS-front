@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch((): Session => ({
         status: "signed-out",
         error:
-          "Microsoft sign-in could not be completed. Try again or check the app registration.",
+          "Autentificarea Microsoft nu a putut fi finalizată. Încercați din nou sau verificați înregistrarea aplicației.",
       }))
       .then((next) => {
         if (active) setSession(next);
@@ -89,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setSession({
             status: "signed-out",
             error:
-              "Sign-in was canceled or could not be completed. Please try again.",
+              "Autentificarea a fost anulată sau nu a putut fi finalizată. Încercați din nou.",
           });
         }
       },

@@ -54,7 +54,7 @@ export async function signOut() {
 export async function acquireToken(forceRefresh = false): Promise<string> {
   await ready;
   const account = msal?.getActiveAccount();
-  if (!msal || !account) throw new Error("Not signed in.");
+  if (!msal || !account) throw new Error("Nu sunteți autentificat.");
   try {
     const result = await msal.acquireTokenSilent({
       scopes,

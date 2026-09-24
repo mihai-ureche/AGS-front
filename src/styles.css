@@ -6,45 +6,62 @@
   --font-display: "Manrope", var(--font);
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  --page: #f5f7fb;
+  /* Agritehnica brand (agritehnica.ro): lime buttons on forest green. */
+  --brand-lime: #c0d330;
+  --brand-forest: #154225;
+
+  --page: #f4f6f3;
   --surface: #ffffff;
-  --surface-2: #f8f9fc;
-  --surface-3: #eef1f7;
-  --border: #e6eaf2;
-  --border-strong: #d4dae6;
-  --text: #1c2538;
-  --text-secondary: #525b70;
-  --text-muted: #80889c;
-  --accent: #5266e3;
-  --accent-strong: #3f52cc;
-  --accent-soft: #eef0fd;
-  --accent-text: #3b4cc0;
-  --on-accent: #ffffff;
+  --surface-2: #f8faf7;
+  --surface-3: #edf1ec;
+  --border: #e3e8e2;
+  --border-strong: #d0d8cf;
+  --text: #17231b;
+  --text-secondary: #4d5a51;
+  --text-muted: #647168;
+  /* Interactive accent: focus, switches, checkboxes, progress (3.4:1 on white). */
+  --accent: #00a04b;
+  --accent-strong: #008a41;
+  --accent-soft: #f2f7d8;
+  --accent-text: #154225;
+  /* Primary buttons and counts, as on agritehnica.ro. */
+  --primary: #c0d330;
+  --primary-hover: #afc129;
+  --on-primary: #154225;
   --good: #11773a;
   --good-soft: #e6f5ec;
   --warning: #8a5800;
   --warning-soft: #fdf3dd;
   --critical: #c02e2c;
   --critical-soft: #fdeceb;
-  --shadow: 0 1px 2px rgb(28 37 56 / 4%), 0 4px 16px rgb(28 37 56 / 4%);
-  --shadow-float: 0 12px 40px rgb(28 37 56 / 16%);
-  --hover-wash: rgb(82 102 227 / 6%);
+  --shadow: 0 1px 2px rgb(23 35 27 / 4%), 0 4px 16px rgb(23 35 27 / 4%);
+  --shadow-float: 0 12px 40px rgb(23 35 27 / 16%);
+  --hover-wash: rgb(0 160 75 / 6%);
+  --backdrop: rgb(10 20 14 / 45%);
 
-  /* Chart tokens — reference palette slots 1–3, validated on these surfaces. */
-  --grid: #edf0f5;
-  --axis: #d4dae6;
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --series-3: #1baf7a;
-  --series-other: #b3b8c4;
-  --series-previous: #9aa1b2;
-  --seq-0: #f1f3f8;
-  --seq-1: #cde2fb;
-  --seq-2: #9ec5f4;
-  --seq-3: #6da7ec;
-  --seq-4: #3987e5;
-  --seq-5: #256abf;
-  --seq-6: #184f95;
+  --sidebar: var(--brand-forest);
+  --sidebar-text: rgb(255 255 255 / 78%);
+  --sidebar-muted: rgb(255 255 255 / 62%);
+  --sidebar-hover: rgb(255 255 255 / 7%);
+  --sidebar-active: rgb(255 255 255 / 11%);
+  --sidebar-border: rgb(255 255 255 / 12%);
+
+  /* Chart tokens — green, blue, orange validated as adjacent stack pairs on these surfaces. */
+  --grid: #ecf0eb;
+  --axis: #d0d8cf;
+  --series-1: #00a04b;
+  --series-2: #2a78d6;
+  --series-3: #eb6834;
+  --series-other: #b4bbb5;
+  --series-previous: #97a19a;
+  /* Sequential: one green hue, light → dark, ending on the brand forest. */
+  --seq-0: #eff2ee;
+  --seq-1: #cdf1d4;
+  --seq-2: #9bdba9;
+  --seq-3: #5fc27a;
+  --seq-4: #00a04b;
+  --seq-5: #0e7035;
+  --seq-6: #154225;
 
   --radius: 12px;
   --radius-sm: 8px;
@@ -59,20 +76,22 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --page: #0e1016;
-    --surface: #171a21;
-    --surface-2: #1b1f27;
-    --surface-3: #242934;
-    --border: #272c37;
-    --border-strong: #353b48;
-    --text: #eceef4;
-    --text-secondary: #b4bac8;
-    --text-muted: #868d9d;
-    --accent: #7d8cf2;
-    --accent-strong: #98a4f6;
-    --accent-soft: #22284a;
-    --accent-text: #aab4f8;
-    --on-accent: #0e1016;
+    --page: #0d110f;
+    --surface: #161b18;
+    --surface-2: #1a201c;
+    --surface-3: #232a25;
+    --border: #262e29;
+    --border-strong: #343d37;
+    --text: #eaefeb;
+    --text-secondary: #b2bcb5;
+    --text-muted: #8b978e;
+    --accent: #3dc169;
+    --accent-strong: #62cf86;
+    --accent-soft: #1a3322;
+    --accent-text: #cadc4f;
+    --primary: #c0d330;
+    --primary-hover: #cfe052;
+    --on-primary: #10301b;
     --good: #45cf73;
     --good-soft: #14281b;
     --warning: #f0bd4f;
@@ -81,22 +100,24 @@
     --critical-soft: #331b1b;
     --shadow: 0 1px 2px rgb(0 0 0 / 30%);
     --shadow-float: 0 16px 48px rgb(0 0 0 / 50%);
-    --hover-wash: rgb(125 140 242 / 8%);
-    --grid: #232833;
-    --axis: #353b48;
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
-    --series-other: #5a606e;
-    --series-previous: #7b8294;
+    --hover-wash: rgb(192 211 48 / 7%);
+    --backdrop: rgb(0 0 0 / 55%);
+    --sidebar: #10301c;
+    --grid: #232a25;
+    --axis: #343d37;
+    --series-1: #00a04b;
+    --series-2: #3987e5;
+    --series-3: #d95926;
+    --series-other: #5a625c;
+    --series-previous: #7c877f;
     /* Dark: low values recede toward the surface, high values brighten. */
-    --seq-0: #1d212a;
-    --seq-1: #13345f;
-    --seq-2: #184f95;
-    --seq-3: #256abf;
-    --seq-4: #3987e5;
-    --seq-5: #6da7ec;
-    --seq-6: #9ec5f4;
+    --seq-0: #1e2521;
+    --seq-1: #114020;
+    --seq-2: #135e2e;
+    --seq-3: #057e3a;
+    --seq-4: #00a04b;
+    --seq-5: #52be71;
+    --seq-6: #8ed99f;
   }
 }
 
@@ -228,11 +249,11 @@ small {
     border-color 0.15s;
 }
 .button-primary {
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--primary);
+  color: var(--on-primary);
 }
 .button-primary:hover:not(:disabled) {
-  background: var(--accent-strong);
+  background: var(--primary-hover);
 }
 .button-secondary {
   background: var(--surface);
@@ -326,8 +347,8 @@ select.control {
   height: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--primary);
+  color: var(--on-primary);
   font-size: 11px;
   font-weight: 700;
 }
@@ -690,7 +711,7 @@ textarea.input {
   box-shadow: var(--shadow-float);
 }
 .dialog::backdrop {
-  background: rgb(14 16 22 / 45%);
+  background: var(--backdrop);
 }
 .dialog-modal {
   width: min(560px, calc(100vw - 32px));
@@ -758,8 +779,19 @@ textarea.input {
   width: 248px;
   height: 100vh;
   padding: 22px 16px 16px;
-  border-right: 1px solid var(--border);
-  background: var(--surface);
+  border-right: 1px solid var(--sidebar-border);
+  background: var(--sidebar);
+  color: #fff;
+}
+.sidebar :focus-visible {
+  outline-color: var(--primary);
+}
+.sidebar .icon-button {
+  color: var(--sidebar-muted);
+}
+.sidebar .icon-button:hover:not(:disabled) {
+  background: var(--sidebar-hover);
+  color: #fff;
 }
 .sidebar-top {
   display: flex;
@@ -777,14 +809,19 @@ textarea.input {
   letter-spacing: -0.03em;
   white-space: nowrap;
 }
+/* The mark keeps its own colors, so it sits on a white tile like the site's icon. */
 .brand-icon {
   display: grid;
   place-items: center;
+  flex-shrink: 0;
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  background: linear-gradient(140deg, #7b88f6, #4f62dc);
-  color: #fff;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.sidebar .brand-icon {
+  box-shadow: none;
 }
 .brand-light {
   font-weight: 500;
@@ -794,23 +831,59 @@ textarea.input {
   gap: 2px;
 }
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 11px;
+  width: 100%;
   height: 40px;
   padding: 0 12px;
+  border: 0;
   border-radius: var(--radius-sm);
-  color: var(--text-secondary);
+  background: transparent;
+  color: var(--sidebar-text);
   font-weight: 600;
+  text-align: left;
   text-decoration: none;
 }
 .nav-item:hover {
-  background: var(--surface-3);
-  color: var(--text);
+  background: var(--sidebar-hover);
+  color: #fff;
 }
 .nav-item.active {
-  background: var(--accent-soft);
-  color: var(--accent-text);
+  background: var(--sidebar-active);
+  color: #fff;
+}
+/* The site marks the current page with a lime bar. */
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--primary);
+}
+.nav-chevron {
+  margin-left: auto;
+  color: var(--sidebar-muted);
+  transition: transform 0.15s;
+}
+.nav-chevron.is-open {
+  transform: rotate(180deg);
+}
+.nav-sub {
+  display: grid;
+  gap: 2px;
+  margin: 2px 0 4px 21px;
+  padding-left: 8px;
+  border-left: 1px solid var(--sidebar-border);
+}
+.nav-sub-item {
+  height: 36px;
+  gap: 9px;
+  font-size: 13px;
 }
 .sidebar-user {
   display: flex;
@@ -818,7 +891,11 @@ textarea.input {
   gap: 10px;
   margin-top: auto;
   padding: 12px 8px 0;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--sidebar-border);
+}
+.sidebar-user .avatar {
+  background: var(--primary);
+  color: var(--on-primary);
 }
 .sidebar-user-text {
   display: grid;
@@ -832,7 +909,7 @@ textarea.input {
   white-space: nowrap;
 }
 .sidebar-user-text small {
-  color: var(--text-muted);
+  color: var(--sidebar-muted);
 }
 .main-shell {
   flex: 1;
@@ -854,7 +931,7 @@ textarea.input {
   inset: 0;
   z-index: 40;
   border: 0;
-  background: rgb(14 16 22 / 45%);
+  background: var(--backdrop);
 }
 
 /* ---------- Pages ---------- */
@@ -1423,6 +1500,19 @@ input[role="switch"]:disabled {
   gap: 8px;
   min-width: 0;
 }
+.currency-control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.client-popover .control-label {
+  max-width: 220px;
+}
+.client-picker {
+  width: 360px;
+  max-width: 100%;
+}
 .date-menu {
   display: grid;
   gap: 4px;
@@ -1743,12 +1833,32 @@ input[role="switch"]:disabled {
 .group-table tbody th {
   max-width: 360px;
 }
+.group-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
 .group-name,
 .expand-button span {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.focus-button {
+  width: 24px;
+  height: 24px;
+}
+/* With a mouse, the focus action appears on the row it belongs to. */
+@media (hover: hover) {
+  .focus-button {
+    opacity: 0;
+  }
+  tr:hover .focus-button,
+  .focus-button:focus-visible {
+    opacity: 1;
+  }
 }
 .expand-button {
   display: flex;
@@ -2020,7 +2130,8 @@ input[role="switch"]:disabled {
     max-width: none;
   }
   .date-menu,
-  .options-menu {
+  .options-menu,
+  .client-picker {
     width: auto;
   }
 }

@@ -1,6 +1,6 @@
 # AGS Insights
 
-Web frontend for [AGS-backend](../AGS-backend). Users sign in with their Microsoft work account. What they see depends on the role and entity grants stored in the backend:
+Web frontend for [AGS-backend](../AGS-backend). The interface is in Romanian and uses the Agritehnica brand greens and mark from [agritehnica.ro](https://www.agritehnica.ro/). Users sign in with their Microsoft work account. What they see depends on the role and entity grants stored in the backend:
 
 | Page      | Shown with   | What it does                                                                                                                                                           |
 | --------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -8,7 +8,7 @@ Web frontend for [AGS-backend](../AGS-backend). Users sign in with their Microso
 | **Users** | `users:read` | Assign roles and entity access, activate/deactivate and soft-delete users (`admin` only)                                                                               |
 | **Roles** | `roles:read` | Inspect roles and their permissions; create and delete custom roles (`admin` only)                                                                                     |
 
-Navigation mirrors the permissions from `GET /api/me`. The backend enforces every permission independently. Signed-in users whose role grants none of these see a "waiting for access" screen with their AGS user ID.
+Users and Roles sit under the **Administrare** menu in the sidebar. Navigation mirrors the permissions from `GET /api/me`. The backend enforces every permission independently. Signed-in users whose role grants none of these see a "waiting for access" screen with their AGS user ID.
 
 Built with React, TypeScript, Vite, MSAL Browser and Recharts. There is no sample or demo data.
 
@@ -58,13 +58,16 @@ The query bar at the top loads data from `GET /api/borg/sales`. The refine bar b
 
 - **Query:** entity (only granted ones), date range (presets or custom, up to 366 days), document type (BFD receipts / AIM delivery notes), warehouse ID (`gestiune`), include transfers, and compare with the previous period of equal length. These settings live in the URL hash, so views can be bookmarked and shared.
 - **Long ranges:** the backend accepts at most 30 days within one calendar year per request. Longer ranges are split into consecutive requests and loaded one after another with a progress bar. Each request uses the backend's maximum `limit` of 50,000 lines. A request that returns exactly the limit shows a "may be incomplete" warning. A 502/503 from Borg is retried once.
-- **Refine:** search (product, code, client, document, invoice), sales vs returns, and filters on product, category, warehouse, document type, channel, client, operator, agent and VAT rate.
+- **Refine:** search (product, code, client, document, invoice), sales vs returns, a **Client** picker, and filters on product, category, warehouse, document type, channel, client, operator, agent and VAT rate.
+- **Clients:** grouped by Borg's `clientId` (then tax ID, then name), so different clients with the same name stay apart. Group the breakdown or split the trend by client; a breakdown row's filter button narrows the view to that one value.
 - **Measure:** net sales, gross sales (incl. VAT), gross margin, quantity or documents. The choice drives the trend, breakdown bars and heatmap.
 - **Breakdown:** group by any dimension (including day, week, month, weekday, hour), optionally "then by" a second one. Rows expand, columns sort, and the result exports to CSV. The line table exports every refined line with all fields.
 
-Metric definitions: **documents** counts distinct `documentId`. **Margin %** is margin ÷ net, computed only over lines where Borg supplies a margin or cost; the KPI shows how much of net sales that covers. **Returns** are lines with a negative value or quantity. Values are shown in RON exactly as Borg returns them.
+Metric definitions: **documents** counts distinct `documentId`. **Margin %** is margin ÷ net, computed only over lines where Borg supplies a margin or cost; the KPI shows how much of net sales that covers. **Returns** are lines with a negative value or quantity.
 
-Loaded lines stay in memory for the browser tab only: switching pages doesn't refetch, and **Reload** fetches fresh data. Sales data is never written to browser storage.
+**Currency:** Borg returns lei. The **Lei / Euro** switch at the top right shows every amount, chart and CSV export in euro at an editable rate (default 5,10 lei per euro, `DEFAULT_EUR_RATE` in `src/lib/currency.ts`). Lei exports keep Borg's exact values; euro exports are rounded to cents.
+
+Loaded lines stay in memory for the browser tab only: switching pages doesn't refetch, and **Reload** fetches fresh data. Sales data is never written to browser storage; only the currency choice and rate are remembered there, per browser.
 
 ## Deploy on Render
 
@@ -74,7 +77,7 @@ Loaded lines stay in memory for the browser tab only: switching pages doesn't re
 
 ```bash
 npm run lint
-npm test         # unit tests: date chunking, aggregation, filters, CSV, URL params
+npm test         # unit tests: date chunking, aggregation, filters, CSV, URL params, currency
 npm run build    # type-checks, then builds
 ```
 
@@ -83,5 +86,7 @@ npm run build    # type-checks, then builds
 - `src/admin/`: shared users/roles state for the admin pages
 - `src/lib/sales.ts`: Borg line normalization, dimensions, metrics, grouping, time series
 - `src/lib/dates.ts`: presets, 30-day request chunking, previous period
+- `src/lib/currency.ts`: lei/euro preference, rate parsing and conversion
+- `src/lib/format.ts`: Romanian number, date and plural formatting
 - `src/pages/`: Sales (`sales/` holds its panels), Users, Roles and the sign-in/access screens
-- `src/styles.css`: tokens (light and dark) and layout
+- `src/styles.css`: tokens (light and dark, Agritehnica greens) and layout

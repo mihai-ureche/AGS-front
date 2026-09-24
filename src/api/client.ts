@@ -47,7 +47,7 @@ export function createApi(baseUrl: string, getToken: TokenSource): Api {
       if (signal?.aborted) throw error;
       throw new ApiError(
         0,
-        "The AGS service could not be reached. Check your connection and try again.",
+        "Serviciul AGS nu a putut fi contactat. Verificați conexiunea și încercați din nou.",
       );
     }
     // Graph tokens can expire between the silent acquisition and the request.
@@ -64,7 +64,7 @@ export function createApi(baseUrl: string, getToken: TokenSource): Api {
         "error" in data &&
         typeof data.error === "string"
           ? data.error
-          : `Request failed (${response.status}).`;
+          : `Cererea a eșuat (${response.status}).`;
       throw new ApiError(response.status, message);
     }
     return data as T;
@@ -80,7 +80,7 @@ export function createApi(baseUrl: string, getToken: TokenSource): Api {
 
 export function errorMessage(error: unknown) {
   if (error instanceof ApiError) return error.message;
-  return "Something went wrong. Please try again.";
+  return "A apărut o eroare. Încercați din nou.";
 }
 
 export function isAbort(error: unknown) {

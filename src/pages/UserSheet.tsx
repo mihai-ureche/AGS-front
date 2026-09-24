@@ -22,7 +22,7 @@ export function UserSheet({
       open={Boolean(user)}
       onClose={onClose}
       variant="sheet"
-      title="Manage access"
+      title="Gestionare acces"
       description={user ? displayName(user) : undefined}
     >
       {user && <UserForm key={user.id} user={user} onClose={onClose} />}
@@ -95,17 +95,18 @@ function UserForm({ user, onClose }: { user: User; onClose: () => void }) {
         </span>
         <div>
           <strong>
-            {displayName(user)} {isMe && <Badge tone="accent">You</Badge>}
+            {displayName(user)} {isMe && <Badge tone="accent">Dvs.</Badge>}
           </strong>
-          <span>{user.email ?? "No email"}</span>
+          <span>{user.email ?? "Fără e-mail"}</span>
         </div>
         <Badge tone={state.tone}>{state.label}</Badge>
       </div>
 
       {deleted && (
-        <Alert tone="warning" title="This account was deleted">
-          Deleted {dateTime(user.deletedAt!)}. Deleted accounts keep their
-          history but can't sign in, be reactivated or be assigned a role.
+        <Alert tone="warning" title="Acest cont a fost șters">
+          Șters pe {dateTime(user.deletedAt!)}. Conturile șterse își păstrează
+          istoricul, dar nu se pot autentifica, nu pot fi reactivate și nu li se
+          poate aloca un rol.
         </Alert>
       )}
       {error && (
@@ -115,15 +116,16 @@ function UserForm({ user, onClose }: { user: User; onClose: () => void }) {
       )}
       {saved && !dirty && (
         <Alert tone="success" onDismiss={() => setSaved(false)}>
-          Changes saved. They apply on the user's next request.
+          Modificările au fost salvate. Se aplică la următoarea cerere a
+          utilizatorului.
         </Alert>
       )}
 
       <section className="form-section">
-        <h3>Role</h3>
+        <h3>Rol</h3>
         <select
           className="control control-block"
-          aria-label="Role"
+          aria-label="Rol"
           value={role}
           disabled={!editable || isMe || saving}
           onChange={(event) => setRole(event.target.value)}
@@ -139,16 +141,16 @@ function UserForm({ user, onClose }: { user: User; onClose: () => void }) {
         </select>
         <p className="form-hint">
           {isMe
-            ? "You can't change your own role. Another administrator, or the backend's user:role command, can."
+            ? "Nu vă puteți schimba propriul rol. O poate face alt administrator sau comanda user:role din backend."
             : selectedRole?.description}
         </p>
       </section>
 
       <section className="form-section">
-        <h3>Entity access</h3>
+        <h3>Acces la entități</h3>
         <p className="form-hint">
-          Sales data needs both an entity grant here and a role that includes
-          sales access.
+          Pentru datele de vânzări sunt necesare atât accesul la entitate de
+          aici, cât și un rol care include vânzările.
         </p>
         <div className="option-cards">
           {targetEntities.map((entity) => (
@@ -174,14 +176,15 @@ function UserForm({ user, onClose }: { user: User; onClose: () => void }) {
         </div>
         {editable && entities.length > 0 && !readsSales && (
           <Alert tone="warning">
-            The <code>{role}</code> role can't read sales, so these grants have
-            no effect until the user has a sales role.
+            Rolul <code>{role}</code> nu poate citi vânzările, așa că aceste
+            accese nu au efect până când utilizatorul primește un rol cu acces
+            la vânzări.
           </Alert>
         )}
       </section>
 
       <section className="form-section">
-        <h3>Account status</h3>
+        <h3>Starea contului</h3>
         <label className="switch-row">
           <input
             type="checkbox"
@@ -191,26 +194,26 @@ function UserForm({ user, onClose }: { user: User; onClose: () => void }) {
             disabled={!editable || isMe || saving}
             onChange={(event) => setIsActive(event.target.checked)}
           />
-          <strong>Account active</strong>
+          <strong>Cont activ</strong>
         </label>
         <p className="form-hint" id="account-status-help">
           {isMe
-            ? "You can't deactivate your own account."
-            : "Inactive users are refused on every request. Role and grants are kept for reactivation."}
+            ? "Nu vă puteți dezactiva propriul cont."
+            : "Utilizatorii inactivi sunt refuzați la fiecare cerere. Rolul și accesele se păstrează pentru reactivare."}
         </p>
       </section>
 
       <dl className="detail-list">
-        <dt>Created</dt>
+        <dt>Creat</dt>
         <dd>{dateTime(user.createdAt)}</dd>
-        <dt>Last sign-in</dt>
+        <dt>Ultima autentificare</dt>
         <dd>{dateTime(user.lastSeenAt)}</dd>
-        <dt>AGS user ID</dt>
+        <dt>ID utilizator AGS</dt>
         <dd>
           <code>{user.id}</code>
           <button
             className="icon-button"
-            aria-label="Copy AGS user ID"
+            aria-label="Copiați ID-ul de utilizator AGS"
             onClick={() => void navigator.clipboard?.writeText(user.id)}
           >
             <Copy size={14} />
@@ -225,14 +228,14 @@ function UserForm({ user, onClose }: { user: User; onClose: () => void }) {
             onClick={onClose}
             disabled={saving}
           >
-            Close
+            Închide
           </button>
           <button
             className="button button-primary"
             onClick={() => void save()}
             disabled={!dirty || saving}
           >
-            {saving ? "Saving…" : "Save changes"}
+            {saving ? "Se salvează…" : "Salvează modificările"}
           </button>
         </div>
       )}
@@ -240,10 +243,10 @@ function UserForm({ user, onClose }: { user: User; onClose: () => void }) {
       {editable && !isMe && (
         <section className="danger-zone">
           <div>
-            <h3>Delete user</h3>
+            <h3>Ștergere utilizator</h3>
             <p>
-              Revokes access permanently, clears entity grants and resets the
-              role to user. Use Inactive for a temporary suspension.
+              Revocă definitiv accesul, elimină accesul la entități și resetează
+              rolul la user. Pentru o suspendare temporară, folosiți Inactiv.
             </p>
           </div>
           {confirmDelete ? (
@@ -253,14 +256,14 @@ function UserForm({ user, onClose }: { user: User; onClose: () => void }) {
                 onClick={() => setConfirmDelete(false)}
                 disabled={saving}
               >
-                Cancel
+                Anulează
               </button>
               <button
                 className="button button-danger"
                 onClick={() => void remove()}
                 disabled={saving}
               >
-                <Trash2 size={15} /> Delete {displayName(user)}
+                <Trash2 size={15} /> Șterge {displayName(user)}
               </button>
             </div>
           ) : (
@@ -269,7 +272,7 @@ function UserForm({ user, onClose }: { user: User; onClose: () => void }) {
               onClick={() => setConfirmDelete(true)}
               disabled={saving}
             >
-              <Trash2 size={15} /> Delete user…
+              <Trash2 size={15} /> Șterge utilizatorul…
             </button>
           )}
         </section>

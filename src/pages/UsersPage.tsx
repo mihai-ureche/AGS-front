@@ -3,7 +3,7 @@ import { ChevronRight, RefreshCw, Search, UserX, Users } from "lucide-react";
 import { useAdminData } from "../admin/AdminData";
 import { useSession } from "../auth/AuthProvider";
 import { Alert, Badge, EmptyState, Spinner } from "../components/ui";
-import { initials, relativeTime } from "../lib/format";
+import { dateTime, initials, relativeTime } from "../lib/format";
 import { entityLabels } from "../lib/labels";
 import { useRoute } from "../lib/route";
 import { displayName, userStatus } from "../admin/users";
@@ -11,11 +11,11 @@ import { UserSheet } from "./UserSheet";
 
 type StatusFilter = "current" | "active" | "inactive" | "deleted" | "all";
 const statusOptions: { value: StatusFilter; label: string }[] = [
-  { value: "current", label: "Active & inactive" },
-  { value: "active", label: "Active" },
-  { value: "inactive", label: "Inactive" },
-  { value: "deleted", label: "Deleted" },
-  { value: "all", label: "All users" },
+  { value: "current", label: "Activi și inactivi" },
+  { value: "active", label: "Activi" },
+  { value: "inactive", label: "Inactivi" },
+  { value: "deleted", label: "Șterși" },
+  { value: "all", label: "Toți utilizatorii" },
 ];
 
 export function UsersPage() {
@@ -53,14 +53,14 @@ export function UsersPage() {
 
   const current = (users ?? []).filter((user) => !user.deletedAt);
   const stats = [
-    { label: "Users", value: current.length },
-    { label: "Active", value: current.filter((user) => user.isActive).length },
+    { label: "Utilizatori", value: current.length },
+    { label: "Activi", value: current.filter((user) => user.isActive).length },
     {
-      label: "Administrators",
+      label: "Administratori",
       value: current.filter((user) => user.role === "admin").length,
     },
     {
-      label: "No entity access",
+      label: "Fără acces la entități",
       value: current.filter((user) => !user.targetEntities.length).length,
     },
   ];
@@ -69,10 +69,10 @@ export function UsersPage() {
     <>
       <div className="page-heading">
         <div>
-          <h1>Users</h1>
+          <h1>Utilizatori</h1>
           <p>
-            Roles, entity access and account status for everyone who has signed
-            in to AGS.
+            Roluri, acces la entități și starea contului pentru toți cei care
+            s-au autentificat în AGS.
           </p>
         </div>
         <div className="page-actions">
@@ -81,7 +81,8 @@ export function UsersPage() {
             onClick={reload}
             disabled={loading}
           >
-            <RefreshCw size={15} className={loading ? "spin" : ""} /> Refresh
+            <RefreshCw size={15} className={loading ? "spin" : ""} />{" "}
+            Reîmprospătare
           </button>
         </div>
       </div>
@@ -89,10 +90,10 @@ export function UsersPage() {
       {error && (
         <Alert
           tone="error"
-          title="Users could not be loaded"
+          title="Utilizatorii nu au putut fi încărcați"
           action={
             <button className="button button-secondary" onClick={reload}>
-              Try again
+              Încercați din nou
             </button>
           }
         >
@@ -116,19 +117,19 @@ export function UsersPage() {
           <label className="search-field">
             <Search size={16} aria-hidden="true" />
             <input
-              aria-label="Search users"
-              placeholder="Search by name or email"
+              aria-label="Căutați utilizatori"
+              placeholder="Căutați după nume sau e-mail"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
           </label>
           <select
             className="control"
-            aria-label="Filter by role"
+            aria-label="Filtrați după rol"
             value={role}
             onChange={(event) => setRole(event.target.value)}
           >
-            <option value="all">All roles</option>
+            <option value="all">Toate rolurile</option>
             {roles?.map((item) => (
               <option key={item.name} value={item.name}>
                 {item.name}
@@ -137,7 +138,7 @@ export function UsersPage() {
           </select>
           <select
             className="control"
-            aria-label="Filter by status"
+            aria-label="Filtrați după stare"
             value={status}
             onChange={(event) => setStatus(event.target.value as StatusFilter)}
           >
@@ -151,19 +152,19 @@ export function UsersPage() {
 
         {loading && !users ? (
           <div className="panel-loading">
-            <Spinner label="Loading users" />
+            <Spinner label="Se încarcă utilizatorii" />
           </div>
         ) : visible.length ? (
           <div className="table-scroll">
             <table className="data-table users-table">
               <thead>
                 <tr>
-                  <th>User</th>
-                  <th>Role</th>
-                  <th>Entity access</th>
-                  <th>Status</th>
-                  <th>Last sign-in</th>
-                  <th aria-label="Actions" />
+                  <th>Utilizator</th>
+                  <th>Rol</th>
+                  <th>Acces la entități</th>
+                  <th>Stare</th>
+                  <th>Ultima autentificare</th>
+                  <th aria-label="Acțiuni" />
                 </tr>
               </thead>
               <tbody>
@@ -184,7 +185,7 @@ export function UsersPage() {
                           <span>
                             <strong>
                               {displayName(user)}{" "}
-                              {isMe && <Badge tone="accent">You</Badge>}
+                              {isMe && <Badge tone="accent">Dvs.</Badge>}
                             </strong>
                             <small>{user.email}</small>
                           </span>
@@ -203,7 +204,7 @@ export function UsersPage() {
                             ))}
                           </div>
                         ) : (
-                          <span className="muted">None</span>
+                          <span className="muted">Niciuna</span>
                         )}
                       </td>
                       <td>
@@ -211,14 +212,14 @@ export function UsersPage() {
                       </td>
                       <td
                         className="muted nowrap"
-                        title={new Date(user.lastSeenAt).toLocaleString()}
+                        title={dateTime(user.lastSeenAt)}
                       >
                         {relativeTime(user.lastSeenAt)}
                       </td>
                       <td className="row-action">
                         <button
                           className="icon-button"
-                          aria-label={`Manage ${displayName(user)}`}
+                          aria-label={`Gestionați ${displayName(user)}`}
                           onClick={(event) => {
                             event.stopPropagation();
                             navigate("users", { user: user.id });
@@ -237,12 +238,14 @@ export function UsersPage() {
           <EmptyState
             icon={users.length ? UserX : Users}
             title={
-              users.length ? "No users match these filters" : "No users yet"
+              users.length
+                ? "Niciun utilizator nu corespunde filtrelor"
+                : "Încă nu există utilizatori"
             }
           >
             {users.length
-              ? "Try a different search, role or status."
-              : "People appear here after they sign in to AGS for the first time."}
+              ? "Încercați altă căutare, alt rol sau altă stare."
+              : "Utilizatorii apar aici după prima autentificare în AGS."}
           </EmptyState>
         ) : null}
       </section>

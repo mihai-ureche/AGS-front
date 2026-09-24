@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Download } from "lucide-react";
 import { downloadCsv } from "../../lib/csv";
-import { money, number, shortDate } from "../../lib/format";
+import { useCurrency } from "../../lib/currency";
+import { number, plural, shortDate } from "../../lib/format";
 import { documentLabel } from "../../lib/sales";
 import type { SaleLine } from "../../lib/sales";
 
@@ -19,6 +20,7 @@ export function LinesTable({
     { key: "date", direction: "desc" },
   );
   const [page, setPage] = useState(0);
+  const { currency, convert, money } = useCurrency();
 
   const sorted = useMemo(() => {
     const sign = sort.direction === "asc" ? 1 : -1;
@@ -87,35 +89,42 @@ export function LinesTable({
   }
 
   function exportCsv() {
+    // Lei stay exactly as Borg returns them; converted amounts are rounded.
+    const amount = (lei: number | null, digits = 2) => {
+      if (lei === null || currency === "RON") return lei;
+      const factor = 10 ** digits;
+      return Math.round(convert(lei) * factor) / factor;
+    };
     downloadCsv(filename, [
       [
-        "Date",
-        "Hour",
-        "Document type",
-        "Channel",
-        "Series",
-        "Number",
-        "Document ID",
-        "Warehouse",
-        "Warehouse ID",
+        "Data",
+        "Ora",
+        "Tip document",
+        "Canal",
+        "Serie",
+        "Număr",
+        "ID document",
+        "Depozit",
+        "ID gestiune",
+        "ID client",
         "Client",
-        "Client tax ID",
+        "Cod fiscal client",
         "Operator",
         "Agent",
-        "Product code",
-        "Product",
-        "Category",
-        "Unit",
-        "Quantity",
-        "Unit price (net)",
+        "Cod produs",
+        "Produs",
+        "Categorie",
+        "UM",
+        "Cantitate",
+        `Preț unitar net (${currency})`,
         "Discount %",
-        "VAT rate %",
-        "Net",
-        "VAT",
-        "Gross",
-        "Cost",
-        "Margin",
-        "Invoice",
+        "Cotă TVA %",
+        `Net (${currency})`,
+        `TVA (${currency})`,
+        `Brut (${currency})`,
+        `Cost (${currency})`,
+        `Marjă (${currency})`,
+        "Factură",
       ],
       ...sorted.map((line) => [
         line.date,
@@ -127,6 +136,7 @@ export function LinesTable({
         line.documentId,
         line.warehouse,
         line.warehouseId,
+        line.clientId,
         line.client,
         line.clientTaxId,
         line.operator,
@@ -136,14 +146,14 @@ export function LinesTable({
         line.category,
         line.unit,
         line.quantity,
-        line.unitPrice,
+        amount(line.unitPrice, 4),
         line.discountPct,
         line.vatRate,
-        line.net,
-        line.vat,
-        line.gross,
-        line.cost,
-        line.margin,
+        amount(line.net),
+        amount(line.vat),
+        amount(line.gross),
+        amount(line.cost),
+        amount(line.margin),
         line.invoice,
       ]),
     ]);
@@ -153,8 +163,11 @@ export function LinesTable({
     <section className="panel" aria-labelledby="lines-title">
       <div className="panel-heading">
         <div>
-          <h2 id="lines-title">Product lines</h2>
-          <p>{number(lines.length)} lines match the current filters.</p>
+          <h2 id="lines-title">Linii de produs</h2>
+          <p>
+            {plural(lines.length, "linie corespunde", "linii corespund")}{" "}
+            filtrelor curente.
+          </p>
         </div>
         <div className="panel-controls">
           <button
@@ -170,15 +183,15 @@ export function LinesTable({
         <table className="data-table lines-table">
           <thead>
             <tr>
-              {header("date", "Date")}
+              {header("date", "Data")}
               <th>Document</th>
-              <th>Warehouse</th>
+              <th>Depozit</th>
               <th>Client</th>
-              {header("product", "Product")}
-              {header("quantity", "Qty", true)}
+              {header("product", "Produs")}
+              {header("quantity", "Cant.", true)}
               {header("net", "Net", true)}
-              <th className="num">Gross</th>
-              {header("margin", "Margin", true)}
+              <th className="num">Brut</th>
+              {header("margin", "Marjă", true)}
             </tr>
           </thead>
           <tbody>
@@ -197,7 +210,7 @@ export function LinesTable({
                   {documentLabel(line)}
                   {line.invoice && (
                     <small className="muted block">
-                      Invoice {line.invoice}
+                      Factura {line.invoice}
                     </small>
                   )}
                 </td>
@@ -235,7 +248,7 @@ export function LinesTable({
         <div className="table-footer">
           <span className="muted">
             {number(current * PAGE_SIZE + 1)}–
-            {number(Math.min((current + 1) * PAGE_SIZE, sorted.length))} of{" "}
+            {number(Math.min((current + 1) * PAGE_SIZE, sorted.length))} din{" "}
             {number(sorted.length)}
           </span>
           <div className="pager">
@@ -244,14 +257,14 @@ export function LinesTable({
               disabled={current === 0}
               onClick={() => setPage(current - 1)}
             >
-              Previous
+              Înapoi
             </button>
             <button
               className="button button-secondary"
               disabled={current >= pages - 1}
               onClick={() => setPage(current + 1)}
             >
-              Next
+              Înainte
             </button>
           </div>
         </div>

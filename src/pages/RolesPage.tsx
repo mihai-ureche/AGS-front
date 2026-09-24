@@ -18,6 +18,7 @@ import {
   permissionLabel,
   roleNamePattern,
 } from "../lib/labels";
+import { plural } from "../lib/format";
 
 export function RolesPage() {
   const { can } = useSession();
@@ -36,7 +37,7 @@ export function RolesPage() {
     setNotice(null);
     try {
       await deleteRole(role.name);
-      setNotice({ tone: "success", text: `Role ${role.name} deleted.` });
+      setNotice({ tone: "success", text: `Rolul ${role.name} a fost șters.` });
     } catch (reason) {
       setNotice({ tone: "error", text: errorMessage(reason) });
     } finally {
@@ -56,10 +57,10 @@ export function RolesPage() {
     <>
       <div className="page-heading">
         <div>
-          <h1>Roles</h1>
+          <h1>Roluri</h1>
           <p>
-            Each user has one role. A role's permissions decide what the backend
-            allows.
+            Fiecare utilizator are un singur rol. Permisiunile rolului stabilesc
+            ce permite backend-ul.
           </p>
         </div>
         <div className="page-actions">
@@ -68,14 +69,15 @@ export function RolesPage() {
             onClick={reload}
             disabled={loading}
           >
-            <RefreshCw size={15} className={loading ? "spin" : ""} /> Refresh
+            <RefreshCw size={15} className={loading ? "spin" : ""} />{" "}
+            Reîmprospătare
           </button>
           {canManage && (
             <button
               className="button button-primary"
               onClick={() => setCreating(true)}
             >
-              <Plus size={16} /> New role
+              <Plus size={16} /> Rol nou
             </button>
           )}
         </div>
@@ -84,10 +86,10 @@ export function RolesPage() {
       {error && (
         <Alert
           tone="error"
-          title="Roles could not be loaded"
+          title="Rolurile nu au putut fi încărcate"
           action={
             <button className="button button-secondary" onClick={reload}>
-              Try again
+              Încercați din nou
             </button>
           }
         >
@@ -102,7 +104,7 @@ export function RolesPage() {
 
       {loading && !roles ? (
         <div className="panel panel-loading">
-          <Spinner label="Loading roles" />
+          <Spinner label="Se încarcă rolurile" />
         </div>
       ) : sorted.length ? (
         <div className="role-grid">
@@ -118,13 +120,13 @@ export function RolesPage() {
                   <div>
                     <h2 className="mono">{role.name}</h2>
                     <span className="muted">
-                      {count} {count === 1 ? "user" : "users"}
+                      {plural(count, "utilizator", "utilizatori")}
                     </span>
                   </div>
                   {builtIn ? (
-                    <Badge>Built-in</Badge>
+                    <Badge>Predefinit</Badge>
                   ) : (
-                    <Badge tone="accent">Custom</Badge>
+                    <Badge tone="accent">Personalizat</Badge>
                   )}
                 </header>
                 <p>{role.description}</p>
@@ -138,7 +140,7 @@ export function RolesPage() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="muted">No permissions.</p>
+                  <p className="muted">Nicio permisiune.</p>
                 )}
                 {canManage && !builtIn && (
                   <footer>
@@ -147,19 +149,21 @@ export function RolesPage() {
                       disabled={count > 0 || deleting === role.name}
                       title={
                         count > 0
-                          ? "Reassign its users before deleting this role."
+                          ? "Mutați utilizatorii pe alt rol înainte de a-l șterge."
                           : undefined
                       }
                       onClick={() => void remove(role)}
                     >
                       <Trash2 size={15} />{" "}
-                      {deleting === role.name ? "Deleting…" : "Delete role"}
+                      {deleting === role.name ? "Se șterge…" : "Șterge rolul"}
                     </button>
                     {count > 0 && (
                       <span className="muted">
-                        Reassign{" "}
-                        {count === 1 ? "its user" : `its ${count} users`} to
-                        delete.
+                        Pentru ștergere, mutați{" "}
+                        {count === 1
+                          ? "utilizatorul"
+                          : `cei ${plural(count, "utilizator", "utilizatori")}`}{" "}
+                        pe alt rol.
                       </span>
                     )}
                   </footer>
@@ -169,7 +173,7 @@ export function RolesPage() {
           })}
         </div>
       ) : roles ? (
-        <EmptyState icon={ShieldCheck} title="No roles found" />
+        <EmptyState icon={ShieldCheck} title="Nu s-au găsit roluri" />
       ) : null}
 
       {canManage && (
@@ -179,7 +183,7 @@ export function RolesPage() {
           onCreated={(role) =>
             setNotice({
               tone: "success",
-              text: `Role ${role.name} created. Assign it from the Users page.`,
+              text: `Rolul ${role.name} a fost creat. Îl puteți aloca din pagina Utilizatori.`,
             })
           }
         />
@@ -206,25 +210,25 @@ function CreateRoleDialog({
   const [error, setError] = useState<string | null>(null);
 
   const nameError = !name
-    ? "Enter a role name."
+    ? "Introduceți numele rolului."
     : !roleNamePattern.test(name)
-      ? "Use 1–50 lowercase letters, digits, _ or -, starting with a letter."
+      ? "Folosiți 1–50 de litere mici, cifre, _ sau -, începând cu o literă."
       : roles?.some((role) => role.name === name)
-        ? "A role with this name already exists."
+        ? "Există deja un rol cu acest nume."
         : null;
   const descriptionError = !description.trim()
-    ? "Enter a description."
+    ? "Introduceți o descriere."
     : description.trim().length > 500
-      ? "Keep it under 500 characters."
+      ? "Folosiți cel mult 500 de caractere."
       : null;
   // Sales first: it is the permission this app actually uses.
   const groups = [
     ...new Set(
       assignablePermissions.map(
-        (permission) => permissionInfo[permission]?.group ?? "Other",
+        (permission) => permissionInfo[permission]?.group ?? "Altele",
       ),
     ),
-  ].sort((a, b) => Number(b === "Sales") - Number(a === "Sales"));
+  ].sort((a, b) => Number(b === "Vânzări") - Number(a === "Vânzări"));
 
   function reset() {
     setName("");
@@ -261,8 +265,8 @@ function CreateRoleDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title="New role"
-      description="Custom roles can grant data access. User and role administration stays with the built-in admin role."
+      title="Rol nou"
+      description="Rolurile personalizate pot acorda acces la date. Administrarea utilizatorilor și a rolurilor rămâne la rolul predefinit admin."
       footer={
         <>
           <button
@@ -270,14 +274,14 @@ function CreateRoleDialog({
             onClick={onClose}
             disabled={saving}
           >
-            Cancel
+            Anulează
           </button>
           <button
             className="button button-primary"
             onClick={() => void submit()}
             disabled={saving}
           >
-            {saving ? "Creating…" : "Create role"}
+            {saving ? "Se creează…" : "Creează rolul"}
           </button>
         </>
       }
@@ -291,8 +295,8 @@ function CreateRoleDialog({
       >
         {error && <Alert tone="error">{error}</Alert>}
         <Field
-          label="Name"
-          hint="For example sales-reader. Names can't be changed later."
+          label="Nume"
+          hint="De exemplu sales-reader. Numele nu mai poate fi schimbat ulterior."
           error={touched ? nameError : null}
         >
           {(control) => (
@@ -307,7 +311,7 @@ function CreateRoleDialog({
             />
           )}
         </Field>
-        <Field label="Description" error={touched ? descriptionError : null}>
+        <Field label="Descriere" error={touched ? descriptionError : null}>
           {(control) => (
             <textarea
               {...control}
@@ -316,23 +320,23 @@ function CreateRoleDialog({
               value={description}
               maxLength={500}
               onChange={(event) => setDescription(event.target.value)}
-              placeholder="Read sales for assigned entities"
+              placeholder="Citește vânzările entităților alocate"
             />
           )}
         </Field>
         <fieldset className="permission-picker">
-          <legend>Permissions</legend>
+          <legend>Permisiuni</legend>
           {groups.map((group) => (
             <div key={group}>
               <span className="eyebrow">
                 {group}
-                {group === "Support requests" &&
-                  " · API only, not used by this app"}
+                {group === "Solicitări de suport" &&
+                  " · doar prin API, nefolosite în această aplicație"}
               </span>
               {assignablePermissions
                 .filter(
                   (permission) =>
-                    (permissionInfo[permission]?.group ?? "Other") === group,
+                    (permissionInfo[permission]?.group ?? "Altele") === group,
                 )
                 .map((permission) => (
                   <label key={permission} className="check-row">

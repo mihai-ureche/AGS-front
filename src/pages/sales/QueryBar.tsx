@@ -9,8 +9,9 @@ import {
 import type { DocType, TargetEntity } from "../../api/types";
 import { Field, Popover } from "../../components/ui";
 import { chunkRange, daysInclusive, presets } from "../../lib/dates";
-import { longDate, shortDate } from "../../lib/format";
+import { longDate, plural, shortDate } from "../../lib/format";
 import { entityLabels } from "../../lib/labels";
+import { docTypeLabels } from "../../lib/sales";
 import { validateCustomRange } from "./params";
 import type { SalesParams } from "./params";
 
@@ -29,11 +30,11 @@ export function QueryBar({
 }) {
   const advanced = Number(Boolean(state.gestiune)) + Number(state.transfers);
   return (
-    <div className="filter-row" role="group" aria-label="Sales query">
+    <div className="filter-row" role="group" aria-label="Interogare vânzări">
       <label className="control control-select">
         <Building2 size={16} aria-hidden="true" />
         <select
-          aria-label="Entity"
+          aria-label="Entitate"
           value={state.entity}
           onChange={(event) =>
             onChange({ entity: event.target.value as TargetEntity })
@@ -51,7 +52,7 @@ export function QueryBar({
 
       <label className="control control-select">
         <select
-          aria-label="Document type"
+          aria-label="Tip document"
           value={state.docType ?? ""}
           onChange={(event) =>
             onChange({
@@ -59,13 +60,13 @@ export function QueryBar({
             })
           }
         >
-          <option value="">All documents</option>
-          <option value="BFD">Receipts (BFD)</option>
-          <option value="AIM">Delivery notes (AIM)</option>
+          <option value="">Toate documentele</option>
+          <option value="BFD">{docTypeLabels.BFD}</option>
+          <option value="AIM">{docTypeLabels.AIM}</option>
         </select>
       </label>
 
-      <Popover label="Options" icon={SlidersHorizontal} badge={advanced}>
+      <Popover label="Opțiuni" icon={SlidersHorizontal} badge={advanced}>
         {() => <AdvancedOptions state={state} onChange={onChange} />}
       </Popover>
 
@@ -76,16 +77,16 @@ export function QueryBar({
           checked={state.compare}
           onChange={(event) => onChange({ compare: event.target.checked })}
         />
-        <span>Compare with previous period</span>
+        <span>Compară cu perioada anterioară</span>
       </label>
 
       <button
         className="button button-secondary filter-row-end"
         onClick={onReload}
         disabled={loading}
-        title="Fetch fresh data from Borg"
+        title="Descarcă date noi din Borg"
       >
-        <RefreshCw size={15} className={loading ? "spin" : ""} /> Reload
+        <RefreshCw size={15} className={loading ? "spin" : ""} /> Reîncarcă
       </button>
     </div>
   );
@@ -106,7 +107,7 @@ function DateRangePicker({
     <Popover label={label} icon={CalendarDays} className="date-popover">
       {(close) => (
         <div className="date-menu">
-          <ul role="listbox" aria-label="Date range presets">
+          <ul role="listbox" aria-label="Intervale predefinite">
             {presets.map((preset) => (
               <li key={preset.key}>
                 <button
@@ -162,11 +163,11 @@ function CustomRange({
         if (!error) onApply(from, to);
       }}
     >
-      <span className="eyebrow">Custom range</span>
+      <span className="eyebrow">Interval personalizat</span>
       <div className="custom-range-inputs">
         <input
           type="date"
-          aria-label="Start date"
+          aria-label="Data de început"
           className="input"
           value={from}
           max={to || undefined}
@@ -175,7 +176,7 @@ function CustomRange({
         <span aria-hidden="true">–</span>
         <input
           type="date"
-          aria-label="End date"
+          aria-label="Data de sfârșit"
           className="input"
           value={to}
           min={from || undefined}
@@ -184,14 +185,14 @@ function CustomRange({
       </div>
       <p className={error ? "field-error" : "field-hint"}>
         {error ??
-          `${daysInclusive({ from, to })} days${requests > 1 ? ` · loaded in ${requests} requests to Borg` : ""}`}
+          `${plural(daysInclusive({ from, to }), "zi", "zile")}${requests > 1 ? ` · încărcat în ${plural(requests, "cerere", "cereri")} către Borg` : ""}`}
       </p>
       <button
         className="button button-primary"
         type="submit"
         disabled={Boolean(error)}
       >
-        Apply range
+        Aplică intervalul
       </button>
     </form>
   );
@@ -218,9 +219,9 @@ function AdvancedOptions({
       }}
     >
       <Field
-        label="Warehouse ID (gestiune)"
-        hint="Optional. Filters in Borg before download."
-        error={invalid ? "Enter a positive whole number." : null}
+        label="ID gestiune"
+        hint="Opțional. Filtrează în Borg înainte de descărcare."
+        error={invalid ? "Introduceți un număr întreg pozitiv." : null}
       >
         {(control) => (
           <div className="input-with-button">
@@ -228,7 +229,7 @@ function AdvancedOptions({
               {...control}
               className="input"
               inputMode="numeric"
-              placeholder="Any"
+              placeholder="Oricare"
               value={gestiune}
               onChange={(event) => setGestiune(event.target.value.trim())}
             />
@@ -240,7 +241,7 @@ function AdvancedOptions({
                 gestiune === (state.gestiune ? String(state.gestiune) : "")
               }
             >
-              Apply
+              Aplică
             </button>
           </div>
         )}
@@ -252,8 +253,8 @@ function AdvancedOptions({
           onChange={(event) => onChange({ transfers: event.target.checked })}
         />
         <span>
-          Include transfers
-          <small>Stock moves between warehouses. Off by default.</small>
+          Include transferurile
+          <small>Mutări de stoc între depozite. Dezactivat implicit.</small>
         </span>
       </label>
     </form>

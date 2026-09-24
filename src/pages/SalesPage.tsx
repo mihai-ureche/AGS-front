@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { CircleOff, KeyRound, SearchX } from "lucide-react";
 import { useSession } from "../auth/AuthProvider";
 import { Alert, EmptyState, Spinner } from "../components/ui";
 import { chunkRange, presets } from "../lib/dates";
-import { longDate, number, shortDate } from "../lib/format";
+import { locale, longDate, number, plural, shortDate } from "../lib/format";
 import { entityLabels } from "../lib/labels";
 import { useRoute } from "../lib/route";
 import {
@@ -14,6 +15,7 @@ import {
 } from "../lib/sales";
 import type { Dimension, MetricKey, Refine } from "../lib/sales";
 import { Breakdown } from "./sales/Breakdown";
+import { CurrencyControl } from "./sales/CurrencyControl";
 import { Heatmap } from "./sales/Heatmap";
 import { Kpis } from "./sales/Kpis";
 import { LinesTable } from "./sales/LinesTable";
@@ -41,20 +43,20 @@ export function SalesPage() {
         <section className="panel">
           <EmptyState
             icon={KeyRound}
-            title="No entities are assigned to your account"
+            title="Contului dumneavoastră nu i-a fost alocată nicio entitate"
             action={
               can("users:roles:update") ? (
                 <button
                   className="button button-primary"
                   onClick={() => navigate("users", { user: profile.id })}
                 >
-                  Grant yourself entity access
+                  Acordați-vă acces la entități
                 </button>
               ) : undefined
             }
           >
-            Sales data is only shown for entities an administrator has granted
-            to you, even for administrators.
+            Datele de vânzări apar doar pentru entitățile alocate de un
+            administrator, inclusiv pentru administratori.
           </EmptyState>
         </section>
       </>
@@ -73,20 +75,27 @@ export function SalesPage() {
 function SalesHeading({
   subtitle,
   status,
+  actions,
 }: {
   subtitle?: string;
   status?: string;
+  actions?: ReactNode;
 }) {
   return (
     <div className="page-heading">
       <div>
-        <h1>Sales</h1>
+        <h1>Vânzări</h1>
         <p>
           {subtitle ??
-            "Product lines from Borg: receipts (BFD) and delivery notes (AIM)."}
+            "Linii de produs din Borg: bonuri fiscale (BFD) și avize (AIM)."}
         </p>
       </div>
-      {status && <p className="page-status">{status}</p>}
+      {(status || actions) && (
+        <div className="page-actions">
+          {status && <p className="page-status">{status}</p>}
+          {actions}
+        </div>
+      )}
     </div>
   );
 }
@@ -111,6 +120,11 @@ function SalesDashboard({
     refineState.entity === state.entity ? refineState.refine : emptyRefine;
   const setRefine = (next: Refine) =>
     setRefineState({ entity: state.entity, refine: next });
+  const focusOn = (dimension: Dimension, key: string) =>
+    setRefine({
+      ...refine,
+      filters: { ...refine.filters, [dimension]: [key] },
+    });
   const [metric, setMetric] = useState<MetricKey>("net");
   const [split, setSplit] = useState<SplitBy>("none");
   const [dimension, setDimension] = useState<Dimension>("category");
@@ -145,7 +159,7 @@ function SalesDashboard({
   const file = `ags-${state.entity}-${state.from}_${state.to}`;
   const status =
     current && data.loadedAt
-      ? `${number(current.lines.length)} lines · loaded ${data.loadedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`
+      ? `${plural(current.lines.length, "linie", "linii")} · încărcate la ${data.loadedAt.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}`
       : undefined;
 
   return (
@@ -153,6 +167,7 @@ function SalesDashboard({
       <SalesHeading
         subtitle={`${entityLabels[state.entity]} · ${rangeLabel}`}
         status={status}
+        actions={<CurrencyControl />}
       />
       <QueryBar
         state={state}
@@ -169,7 +184,7 @@ function SalesDashboard({
         <div
           className="progress"
           role="progressbar"
-          aria-label="Loading sales"
+          aria-label="Se încarcă vânzările"
           aria-valuemin={0}
           aria-valuemax={data.progress.total}
           aria-valuenow={data.progress.done}
@@ -185,13 +200,13 @@ function SalesDashboard({
       {data.status === "error" && (
         <Alert
           tone="error"
-          title="Sales could not be loaded"
+          title="Vânzările nu au putut fi încărcate"
           action={
             <button
               className="button button-secondary"
               onClick={() => setReloadToken((value) => value + 1)}
             >
-              Try again
+              Încercați din nou
             </button>
           }
         >
@@ -200,30 +215,31 @@ function SalesDashboard({
       )}
 
       {truncated.length > 0 && (
-        <Alert tone="warning" title="Some results may be incomplete">
-          Borg returned the maximum of {number(LINE_LIMIT)} lines for{" "}
+        <Alert tone="warning" title="Unele rezultate pot fi incomplete">
+          Borg a returnat numărul maxim de {number(LINE_LIMIT)} de linii pentru{" "}
           {truncated
             .map((range) => `${shortDate(range.from)}–${shortDate(range.to)}`)
             .join(", ")}
-          . Choose a shorter range or a document type to see every line.
+          . Alegeți un interval mai scurt sau un tip de document pentru a vedea
+          toate liniile.
         </Alert>
       )}
 
       {!current ? (
         data.status !== "error" && (
           <section className="panel panel-loading">
-            <Spinner label="Loading sales" />
+            <Spinner label="Se încarcă vânzările" />
             <p>
-              Loading sales from Borg
+              Se încarcă vânzările din Borg
               {data.progress && data.progress.total > 1
-                ? ` · ${data.progress.done} of ${data.progress.total} requests`
+                ? ` · ${data.progress.done} din ${plural(data.progress.total, "cerere", "cereri")}`
                 : ""}
               …
             </p>
             {chunkRange(state).length > 3 && (
               <p className="muted">
-                Long ranges take a while; Borg serves at most 30 days per
-                request.
+                Intervalele lungi durează mai mult; Borg oferă cel mult 30 de
+                zile per cerere.
               </p>
             )}
           </section>
@@ -237,7 +253,7 @@ function SalesDashboard({
               onChange={setRefine}
             />
             <label className="inline-select">
-              <span>Measure</span>
+              <span>Măsură</span>
               <select
                 className="control"
                 value={metric}
@@ -258,28 +274,31 @@ function SalesDashboard({
           >
             {!current.lines.length ? (
               <section className="panel">
-                <EmptyState icon={CircleOff} title="No sales in this period">
-                  Borg returned no product lines for{" "}
-                  {entityLabels[state.entity]} in {rangeLabel.toLowerCase()}.
-                  Try a different range, document type or options.
+                <EmptyState
+                  icon={CircleOff}
+                  title="Nicio vânzare în această perioadă"
+                >
+                  Borg nu a returnat linii de produs pentru{" "}
+                  {entityLabels[state.entity]} în intervalul {rangeLabel}.
+                  Încercați alt interval, alt tip de document sau alte opțiuni.
                 </EmptyState>
               </section>
             ) : !lines.length ? (
               <section className="panel">
                 <EmptyState
                   icon={SearchX}
-                  title="No lines match these filters"
+                  title="Nicio linie nu corespunde filtrelor"
                   action={
                     <button
                       className="button button-secondary"
                       onClick={() => setRefine(emptyRefine)}
                     >
-                      Clear filters
+                      Șterge filtrele
                     </button>
                   }
                 >
-                  {number(current.lines.length)} lines are loaded; the search or
-                  filters exclude all of them.
+                  Linii încărcate: {number(current.lines.length)}. Căutarea sau
+                  filtrele le exclud pe toate.
                 </EmptyState>
               </section>
             ) : (
@@ -289,23 +308,23 @@ function SalesDashboard({
                 <section className="panel" aria-labelledby="trend-title">
                   <div className="panel-heading">
                     <div>
-                      <h2 id="trend-title">Trend</h2>
+                      <h2 id="trend-title">Evoluție</h2>
                       <p>
                         {
                           metricOptions.find((option) => option.key === metric)
                             ?.label
                         }
                         {split === "none" && state.compare
-                          ? " compared with the previous period"
+                          ? " comparativ cu perioada anterioară"
                           : ""}
                         {split !== "none"
-                          ? `, top 3 ${splitOptions.find((option) => option.value === split)?.label.toLowerCase()} values`
+                          ? `, primele 3 valori după ${splitOptions.find((option) => option.value === split)?.label.toLowerCase()}`
                           : ""}
                       </p>
                     </div>
                     <div className="panel-controls">
                       <label className="inline-select">
-                        <span>Split</span>
+                        <span>Împarte după</span>
                         <select
                           className="control"
                           value={split}
@@ -346,13 +365,14 @@ function SalesDashboard({
                     if (thenBy === next) setThenBy("none");
                   }}
                   onThenBy={setThenBy}
+                  onFocus={focusOn}
                   total={totals}
-                  filename={`${file}-by-${dimension}${thenBy === "none" ? "" : `-${thenBy}`}.csv`}
+                  filename={`${file}-pe-${dimension}${thenBy === "none" ? "" : `-${thenBy}`}.csv`}
                 />
 
                 <Heatmap lines={lines} metric={metric} />
 
-                <LinesTable lines={lines} filename={`${file}-lines.csv`} />
+                <LinesTable lines={lines} filename={`${file}-linii.csv`} />
               </>
             )}
           </div>

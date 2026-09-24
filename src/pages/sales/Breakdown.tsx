@@ -1,7 +1,14 @@
 import { Fragment, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronRight, Download } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronRight,
+  Download,
+  Filter,
+} from "lucide-react";
 import { downloadCsv } from "../../lib/csv";
-import { money, number, percent } from "../../lib/format";
+import { useCurrency } from "../../lib/currency";
+import { number, percent, plural } from "../../lib/format";
 import {
   dimensions,
   groupableDimensions,
@@ -22,41 +29,43 @@ type Column = {
   key: string;
   label: string;
   value: (metrics: Metrics) => number | null;
-  format: (value: number | null) => string;
+  kind: "money" | "number" | "percent" | "share";
 };
 const columns: Column[] = [
-  {
-    key: "net",
-    label: "Net sales",
-    value: (m) => m.net,
-    format: (v) => money(v ?? 0),
-  },
-  { key: "share", label: "Share", value: (m) => m.net, format: () => "" },
+  { key: "net", label: "Vânzări nete", value: (m) => m.net, kind: "money" },
+  { key: "share", label: "Pondere", value: (m) => m.net, kind: "share" },
   {
     key: "quantity",
-    label: "Quantity",
+    label: "Cantitate",
     value: (m) => m.quantity,
-    format: (v) => number(v ?? 0),
+    kind: "number",
   },
   {
     key: "documents",
-    label: "Documents",
+    label: "Documente",
     value: (m) => m.documents,
-    format: (v) => number(v ?? 0),
+    kind: "number",
   },
-  {
-    key: "margin",
-    label: "Margin",
-    value: (m) => m.margin,
-    format: (v) => money(v ?? 0),
-  },
-  {
-    key: "marginPct",
-    label: "Margin %",
-    value: marginPct,
-    format: (v) => percent(v),
-  },
+  { key: "margin", label: "Marjă", value: (m) => m.margin, kind: "money" },
+  { key: "marginPct", label: "Marjă %", value: marginPct, kind: "percent" },
 ];
+
+function formatCell(
+  column: Column,
+  value: number | null,
+  money: (lei: number) => string,
+) {
+  switch (column.kind) {
+    case "money":
+      return money(value ?? 0);
+    case "number":
+      return number(value ?? 0);
+    case "percent":
+      return percent(value);
+    case "share":
+      return "";
+  }
+}
 
 type Sort = { key: string; direction: "asc" | "desc" } | null;
 const PAGE = 25;
@@ -86,6 +95,7 @@ export function Breakdown({
   thenBy,
   onDimension,
   onThenBy,
+  onFocus,
   total,
   filename,
 }: {
@@ -95,15 +105,19 @@ export function Breakdown({
   thenBy: Dimension | "none";
   onDimension: (dimension: Dimension) => void;
   onThenBy: (dimension: Dimension | "none") => void;
+  /** Narrows the refine filters to one value, e.g. a single client. */
+  onFocus: (dimension: Dimension, key: string) => void;
   total: Metrics;
   filename: string;
 }) {
+  const { currency, convert, money } = useCurrency();
   const [sort, setSort] = useState<Sort>(null);
   const [limit, setLimit] = useState(PAGE);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const metricInfo = metricOptions.find((option) => option.key === metric)!;
   const format = (value: number) =>
     metricInfo.money ? money(value) : number(value);
+  const focusable = (item: Dimension) => dimensions[item].filterable;
 
   const groups = useMemo(
     () =>
@@ -151,23 +165,23 @@ export function Breakdown({
     const header = [
       dimensions[dimension].label,
       ...(thenBy === "none" ? [] : [dimensions[thenBy].label]),
-      "Net sales",
-      "VAT",
-      "Gross sales",
-      "Quantity",
-      "Documents",
-      "Lines",
-      "Margin",
-      "Margin %",
+      `Vânzări nete (${currency})`,
+      `TVA (${currency})`,
+      `Vânzări brute (${currency})`,
+      "Cantitate",
+      "Documente",
+      "Linii",
+      `Marjă (${currency})`,
+      "Marjă %",
     ];
     const row = (metrics: Metrics) => [
-      metrics.net,
-      metrics.vat,
-      metrics.gross,
+      convert(metrics.net),
+      convert(metrics.vat),
+      convert(metrics.gross),
       metrics.quantity,
       metrics.documents,
       metrics.lines,
-      metrics.margin,
+      convert(metrics.margin),
       marginPct(metrics),
     ];
     const rows = sorted.flatMap((group) =>
@@ -193,16 +207,16 @@ export function Breakdown({
     <section className="panel" aria-labelledby="breakdown-title">
       <div className="panel-heading">
         <div>
-          <h2 id="breakdown-title">Breakdown</h2>
+          <h2 id="breakdown-title">Defalcare</h2>
           <p>
-            {metricInfo.label} by {dimensions[dimension].label.toLowerCase()}
+            {metricInfo.label} după {dimensions[dimension].label.toLowerCase()}
             {thenBy !== "none" &&
-              `, then ${dimensions[thenBy].label.toLowerCase()}`}
+              `, apoi după ${dimensions[thenBy].label.toLowerCase()}`}
           </p>
         </div>
         <div className="panel-controls">
           <label className="inline-select">
-            <span>Group by</span>
+            <span>Grupează după</span>
             <select
               className="control"
               value={dimension}
@@ -220,7 +234,7 @@ export function Breakdown({
             </select>
           </label>
           <label className="inline-select">
-            <span>then by</span>
+            <span>apoi după</span>
             <select
               className="control"
               value={thenBy}
@@ -252,7 +266,7 @@ export function Breakdown({
       {bars.length > 0 && (
         <ol
           className="bar-list"
-          aria-label={`${metricInfo.label} by ${dimensions[dimension].label.toLowerCase()}${dimensions[dimension].ordered ? "" : ", top 10"}`}
+          aria-label={`${metricInfo.label} după ${dimensions[dimension].label.toLowerCase()}${dimensions[dimension].ordered ? "" : ", primele 10"}`}
         >
           {bars.map((group) => {
             const value = metricValue(group.metrics, metric);
@@ -316,6 +330,7 @@ export function Breakdown({
                   <GroupRow
                     group={group}
                     total={total}
+                    money={money}
                     expandable={Boolean(group.children?.length)}
                     open={open}
                     onToggle={() => {
@@ -324,14 +339,26 @@ export function Breakdown({
                       else next.add(group.key);
                       setExpanded(next);
                     }}
+                    onFocus={
+                      focusable(dimension)
+                        ? () => onFocus(dimension, group.key)
+                        : undefined
+                    }
                   />
                   {open &&
+                    thenBy !== "none" &&
                     group.children?.map((child) => (
                       <GroupRow
                         key={child.key}
                         group={child}
                         total={total}
+                        money={money}
                         nested
+                        onFocus={
+                          focusable(thenBy)
+                            ? () => onFocus(thenBy, child.key)
+                            : undefined
+                        }
                       />
                     ))}
                 </Fragment>
@@ -340,12 +367,12 @@ export function Breakdown({
           </tbody>
           <tfoot>
             <tr>
-              <th>Total · {number(groups.length)} groups</th>
+              <th>Total · {plural(groups.length, "grup", "grupuri")}</th>
               {columns.map((column) => (
                 <td key={column.key} className="num">
-                  {column.key === "share"
+                  {column.kind === "share"
                     ? "100%"
-                    : column.format(column.value(total))}
+                    : formatCell(column, column.value(total), money)}
                 </td>
               ))}
             </tr>
@@ -355,13 +382,13 @@ export function Breakdown({
       {sorted.length > limit && (
         <div className="table-footer">
           <span className="muted">
-            Showing {limit} of {number(sorted.length)}
+            Se afișează {limit} din {number(sorted.length)}
           </span>
           <button
             className="button button-secondary"
             onClick={() => setLimit(limit + PAGE * 4)}
           >
-            Show more
+            Afișează mai multe
           </button>
         </div>
       )}
@@ -372,37 +399,53 @@ export function Breakdown({
 function GroupRow({
   group,
   total,
+  money,
   expandable = false,
   open = false,
   nested = false,
   onToggle,
+  onFocus,
 }: {
   group: Group;
   total: Metrics;
+  money: (lei: number) => string;
   expandable?: boolean;
   open?: boolean;
   nested?: boolean;
   onToggle?: () => void;
+  onFocus?: () => void;
 }) {
   const share = total.net ? (group.metrics.net / total.net) * 100 : null;
   return (
     <tr className={nested ? "nested-row" : ""}>
       <th scope="row">
-        {expandable ? (
-          <button
-            className="expand-button"
-            aria-expanded={open}
-            onClick={onToggle}
-          >
-            <ChevronRight size={14} className={open ? "rotate-90" : ""} />
-            <span>{group.name}</span>
-          </button>
-        ) : (
-          <span className="group-name">{group.name}</span>
-        )}
+        <div className="group-cell">
+          {expandable ? (
+            <button
+              className="expand-button"
+              aria-expanded={open}
+              onClick={onToggle}
+            >
+              <ChevronRight size={14} className={open ? "rotate-90" : ""} />
+              <span>{group.name}</span>
+            </button>
+          ) : (
+            <span className="group-name">{group.name}</span>
+          )}
+          {onFocus && (
+            <button
+              className="icon-button focus-button"
+              aria-label={`Afișează doar ${group.name}`}
+              title="Afișează doar această valoare"
+              onClick={onFocus}
+            >
+              <Filter size={13} />
+            </button>
+          )}
+        </div>
       </th>
       {columns.map((column) =>
-        column.key === "share" ? (
+        column.kind === "share" ? (
           <td key={column.key} className="num">
             <span className="share-cell">
               <span className="share-track" aria-hidden="true">
@@ -421,7 +464,7 @@ function GroupRow({
             key={column.key}
             className={`num ${(column.value(group.metrics) ?? 0) < 0 ? "negative" : ""}`}
           >
-            {column.format(column.value(group.metrics))}
+            {formatCell(column, column.value(group.metrics), money)}
           </td>
         ),
       )}

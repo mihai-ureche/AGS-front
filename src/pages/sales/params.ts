@@ -24,10 +24,11 @@ export const DEFAULT_PRESET: PresetKey = "last30";
 
 export function validateCustomRange(from: string, to: string): string | null {
   if (!isValidIso(from) || !isValidIso(to))
-    return "Choose a start and end date.";
-  if (from > to) return "The start date must be on or before the end date.";
+    return "Alegeți data de început și data de sfârșit.";
+  if (from > to)
+    return "Data de început trebuie să fie cel târziu data de sfârșit.";
   if (daysInclusive({ from, to }) > MAX_RANGE_DAYS)
-    return `Choose at most ${MAX_RANGE_DAYS} days.`;
+    return `Alegeți cel mult ${MAX_RANGE_DAYS} de zile.`;
   return null;
 }
 

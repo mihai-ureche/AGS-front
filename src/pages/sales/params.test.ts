@@ -56,7 +56,7 @@ describe("sales URL params", () => {
 
   it("validates custom ranges", () => {
     expect(validateCustomRange("2026-01-01", "2026-12-31")).toBeNull();
-    expect(validateCustomRange("2025-01-01", "2026-01-02")).toMatch(/at most/);
-    expect(validateCustomRange("2026-02-30", "2026-03-01")).toMatch(/Choose/);
+    expect(validateCustomRange("2025-01-01", "2026-01-02")).toMatch(/cel mult/);
+    expect(validateCustomRange("2026-02-30", "2026-03-01")).toMatch(/Alegeți/);
   });
 });

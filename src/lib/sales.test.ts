@@ -152,6 +152,50 @@ describe("grouping", () => {
     ]);
   });
 
+  it("groups clients by Borg client ID, so namesakes stay apart", () => {
+    const clients = normalizeLines([
+      {
+        ...base,
+        miscareId: 10,
+        clientId: 7,
+        client: "Agro SRL",
+        valoareNet: 10,
+      },
+      {
+        ...base,
+        miscareId: 11,
+        clientId: 7,
+        client: "Agro SRL",
+        valoareNet: 5,
+      },
+      {
+        ...base,
+        miscareId: 12,
+        clientId: 8,
+        client: "Agro SRL",
+        clientCodFiscal: "RO123",
+        valoareNet: 40,
+      },
+    ]);
+    expect(
+      groupLines(clients, "client").map((group) => [
+        group.key,
+        group.name,
+        group.metrics.net,
+      ]),
+    ).toEqual([
+      ["id:8", "Agro SRL · RO123", 40],
+      ["id:7", "Agro SRL", 15],
+    ]);
+    expect(
+      refineLines(clients, {
+        search: "",
+        kind: "all",
+        filters: { client: ["id:7"] },
+      }).map((line) => line.id),
+    ).toEqual(["10", "11"]);
+  });
+
   it("keeps time dimensions in calendar order", () => {
     expect(groupLines(lines, "day").map((group) => group.key)).toEqual([
       "2026-09-01",

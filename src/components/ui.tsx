@@ -5,7 +5,11 @@ import type { LucideIcon } from "lucide-react";
 
 export function Spinner({ label }: { label?: string }) {
   return (
-    <span className="spinner" role="status" aria-label={label ?? "Loading"} />
+    <span
+      className="spinner"
+      role="status"
+      aria-label={label ?? "Se încarcă"}
+    />
   );
 }
 
@@ -38,7 +42,7 @@ export function Alert({
       {onDismiss && (
         <button
           className="icon-button"
-          aria-label="Dismiss"
+          aria-label="Închide mesajul"
           onClick={onDismiss}
         >
           <X size={15} />
@@ -129,7 +133,7 @@ export function Dialog({
             </div>
             <button
               className="icon-button"
-              aria-label="Close"
+              aria-label="Închide"
               onClick={onClose}
             >
               <X size={18} />

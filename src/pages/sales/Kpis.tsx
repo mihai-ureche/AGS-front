@@ -1,9 +1,10 @@
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
+import { useCurrency } from "../../lib/currency";
 import {
   change,
-  money,
   number,
   percent,
+  plural,
   signedPercent,
 } from "../../lib/format";
 import { averageDocument, costCoverage, marginPct } from "../../lib/sales";
@@ -27,41 +28,42 @@ export function Kpis({
   current: Metrics;
   previous?: Metrics;
 }) {
+  const { money } = useCurrency();
   const coverage = costCoverage(current);
   const tiles: Tile[] = [
     {
-      label: "Net sales",
+      label: "Vânzări nete",
       value: money(current.net),
-      detail: `${money(current.gross)} incl. VAT`,
+      detail: `${money(current.gross)} cu TVA`,
       current: current.net,
       previous: previous?.net,
       hero: true,
     },
     {
-      label: "Gross margin",
+      label: "Marjă brută",
       value: money(current.margin),
-      detail: `${percent(marginPct(current))} of net${coverage < 99.5 ? ` · cost known for ${percent(coverage, 0)} of sales` : ""}`,
+      detail: `${percent(marginPct(current))} din net${coverage < 99.5 ? ` · cost cunoscut pentru ${percent(coverage, 0)} din vânzări` : ""}`,
       current: current.margin,
       previous: previous?.margin,
     },
     {
-      label: "Documents",
+      label: "Documente",
       value: number(current.documents),
-      detail: `${number(current.lines)} product lines`,
+      detail: plural(current.lines, "linie de produs", "linii de produs"),
       current: current.documents,
       previous: previous?.documents,
     },
     {
-      label: "Average document",
+      label: "Valoare medie document",
       value: money(averageDocument(current)),
-      detail: "Net sales per receipt or delivery note",
+      detail: "Vânzări nete per bon sau aviz",
       current: averageDocument(current),
       previous: previous ? averageDocument(previous) : undefined,
     },
     {
-      label: "Returns",
+      label: "Retururi",
       value: money(current.returns),
-      detail: `${number(current.returnLines)} return lines`,
+      detail: plural(current.returnLines, "linie de retur", "linii de retur"),
       // Compare magnitudes: more returned value is worse.
       current: Math.abs(current.returns),
       previous: previous ? Math.abs(previous.returns) : undefined,
@@ -102,7 +104,7 @@ function Delta({
 }) {
   const delta = change(current, previous);
   if (delta === null)
-    return <span className="delta">No data in previous period</span>;
+    return <span className="delta">Fără date în perioada anterioară</span>;
   const flat = Math.abs(delta) < 0.05;
   const good = flat ? null : delta > 0 === upIsGood;
   const Icon = flat ? Minus : delta > 0 ? ArrowUpRight : ArrowDownRight;
@@ -111,7 +113,7 @@ function Delta({
       className={`delta ${good === null ? "" : good ? "delta-good" : "delta-bad"}`}
     >
       <Icon size={14} aria-hidden="true" />
-      <strong>{signedPercent(delta)}</strong> vs previous period
+      <strong>{signedPercent(delta)}</strong> față de perioada anterioară
     </span>
   );
 }

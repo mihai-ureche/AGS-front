@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { AdminDataProvider } from "./admin/AdminData";
 import { useAuth, useSession } from "./auth/AuthProvider";
-import { navIcons, Shell } from "./components/Shell";
-import type { NavItem } from "./components/Shell";
+import { isNavGroup, navIcons, Shell } from "./components/Shell";
+import type { NavEntry, NavLink } from "./components/Shell";
 import { missingConfig } from "./config";
 import { useRoute } from "./lib/route";
 import {
@@ -36,24 +36,38 @@ function Workspace() {
   const { can } = useSession();
   const { page, navigate } = useRoute();
   // Navigation mirrors backend permissions; the backend enforces them independently.
-  const nav: NavItem[] = [
-    can("sales:read") && {
-      page: "sales",
-      label: "Sales",
-      icon: navIcons.sales,
-    },
+  const adminPages: NavLink[] = [
     can("users:read") && {
       page: "users",
-      label: "Users",
+      label: "Utilizatori",
       icon: navIcons.users,
     },
     can("roles:read") && {
       page: "roles",
-      label: "Roles",
+      label: "Roluri",
       icon: navIcons.roles,
     },
-  ].filter((item): item is NavItem => Boolean(item));
-  const current = nav.find((item) => item.page === page)?.page ?? nav[0]?.page;
+  ].filter((item): item is NavLink => Boolean(item));
+  const nav: NavEntry[] = [
+    ...(can("sales:read")
+      ? [{ page: "sales", label: "Vânzări", icon: navIcons.sales }]
+      : []),
+    ...(adminPages.length
+      ? [
+          {
+            id: "admin",
+            label: "Administrare",
+            icon: navIcons.admin,
+            items: adminPages,
+          },
+        ]
+      : []),
+  ];
+  const pages = nav.flatMap((entry) =>
+    isNavGroup(entry) ? entry.items : [entry],
+  );
+  const current =
+    pages.find((item) => item.page === page)?.page ?? pages[0]?.page;
 
   useEffect(() => {
     if (current && current !== page) navigate(current, {}, true);

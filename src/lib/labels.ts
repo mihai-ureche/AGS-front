@@ -10,28 +10,34 @@ export const builtInRoles = ["user", "support", "admin"];
 
 export const permissionInfo: Record<
   Permission,
-  { label: string; group: "Sales" | "Support requests" | "Administration" }
+  { label: string; group: "Vânzări" | "Solicitări de suport" | "Administrare" }
 > = {
-  "sales:read": { label: "Read sales for granted entities", group: "Sales" },
-  "requests:create": { label: "Create requests", group: "Support requests" },
+  "sales:read": {
+    label: "Citește vânzările entităților alocate",
+    group: "Vânzări",
+  },
+  "requests:create": {
+    label: "Creează solicitări",
+    group: "Solicitări de suport",
+  },
   "requests:read:own": {
-    label: "View own requests",
-    group: "Support requests",
+    label: "Vede propriile solicitări",
+    group: "Solicitări de suport",
   },
   "requests:read:all": {
-    label: "View all requests",
-    group: "Support requests",
+    label: "Vede toate solicitările",
+    group: "Solicitări de suport",
   },
   "requests:update": {
-    label: "Update request status",
-    group: "Support requests",
+    label: "Actualizează starea solicitărilor",
+    group: "Solicitări de suport",
   },
-  "users:read": { label: "View users", group: "Administration" },
+  "users:read": { label: "Vede utilizatorii", group: "Administrare" },
   "users:roles:update": {
-    label: "Manage users and roles",
-    group: "Administration",
+    label: "Gestionează utilizatorii și rolurile",
+    group: "Administrare",
   },
-  "roles:read": { label: "View roles", group: "Administration" },
+  "roles:read": { label: "Vede rolurile", group: "Administrare" },
 };
 
 export const permissionLabel = (permission: string) =>

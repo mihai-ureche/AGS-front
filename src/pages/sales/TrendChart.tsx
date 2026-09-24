@@ -10,8 +10,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useCurrency } from "../../lib/currency";
 import type { DateRange } from "../../lib/dates";
-import { compact, money, number } from "../../lib/format";
+import { compact, formatMoney, number } from "../../lib/format";
 import {
   bucketFor,
   dimensions,
@@ -22,20 +23,29 @@ import {
 import type { Dimension, MetricKey, SaleLine } from "../../lib/sales";
 
 export type SplitBy =
-  "none" | Extract<Dimension, "docType" | "warehouse" | "category" | "channel">;
+  | "none"
+  | Extract<
+      Dimension,
+      "docType" | "warehouse" | "category" | "channel" | "client"
+    >;
 export const splitOptions: { value: SplitBy; label: string }[] = [
-  { value: "none", label: "No split" },
-  { value: "docType", label: "Document type" },
-  { value: "warehouse", label: "Warehouse" },
-  { value: "category", label: "Category" },
-  { value: "channel", label: "Channel" },
+  { value: "none", label: "Fără împărțire" },
+  { value: "docType", label: "Tip document" },
+  { value: "warehouse", label: "Depozit" },
+  { value: "category", label: "Categorie" },
+  { value: "channel", label: "Canal" },
+  { value: "client", label: "Client" },
 ];
 
-// Categorical slots 1–3 (validated all-pairs, light and dark); the tail folds into gray "Other".
+// Categorical slots 1–3: brand green, blue, orange. Validated for stacks (adjacent
+// pairs, light and dark), so green and orange must never touch: keep this order.
+// The tail folds into gray "Other".
 const SERIES_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)"];
 const OTHER_COLOR = "var(--series-other)";
 
 type Series = { key: string; name: string; color: string };
+
+const bucketNames = { day: "zi", week: "săptămână", month: "lună" };
 
 export function TrendChart({
   lines,
@@ -53,13 +63,17 @@ export function TrendChart({
   split: SplitBy;
   previous?: { lines: SaleLine[]; range: DateRange };
 }) {
+  const { currency, convert } = useCurrency();
   const metricInfo = metricOptions.find((option) => option.key === metric)!;
+  // Points are converted before plotting so the axis ticks fall on round values.
   const format = (value: number) =>
-    metricInfo.money ? money(value) : number(value);
+    metricInfo.money ? formatMoney(value, currency) : number(value);
 
   const series = useMemo<Series[]>(() => {
     if (split === "none")
-      return [{ key: "value", name: "This period", color: SERIES_COLORS[0]! }];
+      return [
+        { key: "value", name: "Perioada curentă", color: SERIES_COLORS[0]! },
+      ];
     const groups = groupLines(paletteLines, split, metric);
     const top = groups.slice(0, 3).map((group, index) => ({
       key: `s:${group.key}`,
@@ -67,21 +81,26 @@ export function TrendChart({
       color: SERIES_COLORS[index]!,
     }));
     return groups.length > 3
-      ? [...top, { key: "other", name: "Other", color: OTHER_COLOR }]
+      ? [...top, { key: "other", name: "Altele", color: OTHER_COLOR }]
       : top;
   }, [paletteLines, split, metric]);
 
-  const data = useMemo(
-    () =>
-      timeSeries(lines, range, metric, {
-        split: split === "none" ? undefined : split,
-        splitKeys: series
-          .filter((item) => item.key.startsWith("s:"))
-          .map((item) => item.key.slice(2)),
-        previous: split === "none" ? previous : undefined,
-      }),
-    [lines, range, metric, split, series, previous],
-  );
+  const data = useMemo(() => {
+    const points = timeSeries(lines, range, metric, {
+      split: split === "none" ? undefined : split,
+      splitKeys: series
+        .filter((item) => item.key.startsWith("s:"))
+        .map((item) => item.key.slice(2)),
+      previous: split === "none" ? previous : undefined,
+    });
+    if (!metricInfo.money) return points;
+    return points.map((point) => {
+      const converted = { ...point };
+      for (const [key, value] of Object.entries(point))
+        if (typeof value === "number") converted[key] = convert(value);
+      return converted;
+    });
+  }, [lines, range, metric, split, series, previous, metricInfo, convert]);
 
   const showPrevious = split === "none" && Boolean(previous);
   const legend: (Series & { dashed?: boolean })[] = showPrevious
@@ -89,7 +108,7 @@ export function TrendChart({
         ...series,
         {
           key: "previous",
-          name: "Previous period",
+          name: "Perioada anterioară",
           color: "var(--series-previous)",
         },
       ]
@@ -101,7 +120,7 @@ export function TrendChart({
   return (
     <figure className="chart-figure">
       {legend.length > 1 && (
-        <ul className="legend" aria-label="Legend">
+        <ul className="legend" aria-label="Legendă">
           {legend.map((item) => (
             <li key={item.key}>
               <i
@@ -116,7 +135,7 @@ export function TrendChart({
       <div
         className="trend-chart"
         role="img"
-        aria-label={`${metricInfo.label} per ${bucket}${split === "none" ? "" : `, split by ${dimensions[split].label.toLowerCase()}`}`}
+        aria-label={`${metricInfo.label} pe ${bucketNames[bucket]}${split === "none" ? "" : `, împărțit după ${dimensions[split].label.toLowerCase()}`}`}
       >
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
@@ -191,7 +210,7 @@ export function TrendChart({
                   stackId="split"
                   fill={item.color}
                   stroke="var(--surface)"
-                  strokeWidth={1}
+                  strokeWidth={2}
                   maxBarSize={24}
                   radius={index === series.length - 1 ? [4, 4, 0, 0] : 0}
                   isAnimationActive={false}

@@ -86,14 +86,14 @@ export type PresetKey =
   | "thisYear";
 
 export const presets: { key: PresetKey; label: string }[] = [
-  { key: "today", label: "Today" },
-  { key: "yesterday", label: "Yesterday" },
-  { key: "last7", label: "Last 7 days" },
-  { key: "last30", label: "Last 30 days" },
-  { key: "thisMonth", label: "This month" },
-  { key: "lastMonth", label: "Last month" },
-  { key: "last90", label: "Last 90 days" },
-  { key: "thisYear", label: "Year to date" },
+  { key: "today", label: "Azi" },
+  { key: "yesterday", label: "Ieri" },
+  { key: "last7", label: "Ultimele 7 zile" },
+  { key: "last30", label: "Ultimele 30 de zile" },
+  { key: "thisMonth", label: "Luna aceasta" },
+  { key: "lastMonth", label: "Luna trecută" },
+  { key: "last90", label: "Ultimele 90 de zile" },
+  { key: "thisYear", label: "De la începutul anului" },
 ];
 
 export function presetRange(
