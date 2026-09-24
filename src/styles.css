@@ -1908,6 +1908,30 @@ input[role="switch"]:disabled {
   border-radius: 0 3px 3px 0;
   background: var(--series-1);
 }
+/* Part-to-whole strip: 2px surface gaps, square baseline, rounded data end. */
+.share-strip {
+  display: flex;
+  gap: 2px;
+  height: 24px;
+}
+.share-segment {
+  flex: 0 0 0;
+  min-width: 0;
+  transition: opacity 0.15s;
+}
+.share-segment:last-child {
+  border-radius: 0 4px 4px 0;
+}
+.share-segment.is-dimmed {
+  opacity: 0.35;
+}
+.share-table .group-cell .legend-swatch {
+  margin-right: 4px;
+}
+.share-table tr.is-hover th,
+.share-table tr.is-hover td {
+  background: var(--hover-wash);
+}
 .lines-table td {
   white-space: nowrap;
 }

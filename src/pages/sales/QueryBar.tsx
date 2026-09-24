@@ -254,7 +254,7 @@ function AdvancedOptions({
         />
         <span>
           Include transferurile
-          <small>Mutări de stoc între depozite. Dezactivat implicit.</small>
+          <small>Mutări de stoc între gestiuni. Dezactivat implicit.</small>
         </span>
       </label>
     </form>

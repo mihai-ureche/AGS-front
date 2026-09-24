@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { toCsv } from "./csv";
 import {
+  composition,
   groupLines,
   heatmap,
   marginPct,
@@ -99,6 +100,7 @@ const lines = normalizeLines([
     ...base,
     miscareId: 3,
     documentId: 2158,
+    gestiuneId: 3,
     depozit: "STOC",
     tipDocument: "AIM",
     data: "2026-09-02",
@@ -145,10 +147,14 @@ describe("grouping", () => {
       ["Scutece", 250],
     ]);
     expect(
-      groups[1]!.children!.map((child) => [child.key, child.metrics.net]),
+      groups[1]!.children!.map((child) => [
+        child.key,
+        child.name,
+        child.metrics.net,
+      ]),
     ).toEqual([
-      ["STOC", 200],
-      ["COPOU", 50],
+      ["id:3", "STOC", 200],
+      ["id:2", "COPOU", 50],
     ]);
   });
 
@@ -204,6 +210,57 @@ describe("grouping", () => {
   });
 });
 
+describe("composition", () => {
+  const gestiune = (id: number, net: number, marja: number | null = null) => ({
+    ...base,
+    miscareId: id * 10 + net,
+    gestiuneId: id,
+    depozit: `G${id}`,
+    valoareNet: net,
+    marja,
+  });
+
+  it("gives each gestiune its share of the total", () => {
+    const { total, rows, segments } = composition(lines, "warehouse", "net");
+    expect(total).toBe(550);
+    expect(rows.map((row) => [row.name, row.value, row.slot])).toEqual([
+      ["COPOU", 350, 0],
+      ["STOC", 200, 1],
+    ]);
+    expect(rows[0]!.share).toBeCloseTo(63.64, 2);
+    expect(segments.map((segment) => segment.name)).toEqual(["COPOU", "STOC"]);
+  });
+
+  it("folds everything past the third gestiune into one segment", () => {
+    const five = normalizeLines(
+      [50, 40, 30, 20, 10].map((net, index) => gestiune(index + 1, net)),
+    );
+    const { segments, folded } = composition(five, "warehouse", "net");
+    expect(segments.map((segment) => [segment.key, segment.value])).toEqual([
+      ["id:1", 50],
+      ["id:2", 40],
+      ["id:3", 30],
+      ["__other", 30],
+    ]);
+    expect(folded).toBe(2);
+  });
+
+  it("keeps colors on the gestiune, not its rank, while refining", () => {
+    const all = normalizeLines([gestiune(1, 500), gestiune(2, 300)]);
+    const onlySecond = all.filter((line) => line.warehouseId === 2);
+    const { rows } = composition(onlySecond, "warehouse", "net", all);
+    expect(rows.map((row) => [row.key, row.slot])).toEqual([["id:2", 1]]);
+  });
+
+  it("drops the segments when a part is negative", () => {
+    const mixed = normalizeLines([gestiune(1, 100, 30), gestiune(2, 50, -40)]);
+    const { rows, segments, total } = composition(mixed, "warehouse", "margin");
+    expect(total).toBe(-10);
+    expect(rows.every((row) => row.share === null)).toBe(true);
+    expect(segments).toEqual([]);
+  });
+});
+
 describe("refineLines", () => {
   it("filters by dimension values, line kind and search terms", () => {
     expect(
@@ -215,7 +272,7 @@ describe("refineLines", () => {
       refineLines(lines, {
         search: "",
         kind: "sales",
-        filters: { warehouse: ["STOC"] },
+        filters: { warehouse: ["id:3"] },
       }).map((line) => line.id),
     ).toEqual(["3"]);
     expect(

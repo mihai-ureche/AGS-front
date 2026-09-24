@@ -104,7 +104,7 @@ export function LinesTable({
         "Serie",
         "Număr",
         "ID document",
-        "Depozit",
+        "Gestiune",
         "ID gestiune",
         "ID client",
         "Client",
@@ -185,7 +185,7 @@ export function LinesTable({
             <tr>
               {header("date", "Data")}
               <th>Document</th>
-              <th>Depozit</th>
+              <th>Gestiune</th>
               <th>Client</th>
               {header("product", "Produs")}
               {header("quantity", "Cant.", true)}

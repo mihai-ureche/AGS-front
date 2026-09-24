@@ -30,6 +30,7 @@ import {
   LINE_LIMIT,
   useSalesData,
 } from "./sales/useSalesData";
+import { WarehouseShare } from "./sales/WarehouseShare";
 
 export function SalesPage() {
   const { me, profile, can } = useSession();
@@ -354,6 +355,13 @@ function SalesDashboard({
                     }
                   />
                 </section>
+
+                <WarehouseShare
+                  lines={lines}
+                  paletteLines={current.lines}
+                  metric={metric}
+                  onFocus={focusOn}
+                />
 
                 <Breakdown
                   lines={lines}

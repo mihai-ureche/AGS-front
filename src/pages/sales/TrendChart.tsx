@@ -31,7 +31,7 @@ export type SplitBy =
 export const splitOptions: { value: SplitBy; label: string }[] = [
   { value: "none", label: "Fără împărțire" },
   { value: "docType", label: "Tip document" },
-  { value: "warehouse", label: "Depozit" },
+  { value: "warehouse", label: "Gestiune" },
   { value: "category", label: "Categorie" },
   { value: "channel", label: "Canal" },
   { value: "client", label: "Client" },
@@ -40,8 +40,12 @@ export const splitOptions: { value: SplitBy; label: string }[] = [
 // Categorical slots 1–3: brand green, blue, orange. Validated for stacks (adjacent
 // pairs, light and dark), so green and orange must never touch: keep this order.
 // The tail folds into gray "Other".
-const SERIES_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)"];
-const OTHER_COLOR = "var(--series-other)";
+export const SERIES_COLORS = [
+  "var(--series-1)",
+  "var(--series-2)",
+  "var(--series-3)",
+];
+export const OTHER_COLOR = "var(--series-other)";
 
 type Series = { key: string; name: string; color: string };
 

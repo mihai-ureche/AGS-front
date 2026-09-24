@@ -13,6 +13,7 @@ export interface SaleLine {
   date: string;
   /** Hour of day the document was issued, when Borg provides a time. */
   hour: number | null;
+  /** Borg's gestiune ID; `warehouse` is its name (`depozit`). */
   warehouseId: number | null;
   warehouse: string;
   /** Borg's client ID; tells apart clients that share a name. */
@@ -90,7 +91,7 @@ export function normalizeLine(
     warehouseId: num(raw.gestiuneId),
     warehouse:
       text(raw.depozit) ??
-      (text(raw.gestiuneId) ? `#${text(raw.gestiuneId)}` : NONE),
+      (text(raw.gestiuneId) ? `Gestiunea ${text(raw.gestiuneId)}` : NONE),
     clientId: text(raw.clientId),
     client: text(raw.client) ?? NONE,
     clientTaxId: text(raw.clientCodFiscal),
@@ -176,8 +177,10 @@ export const dimensions: Record<Dimension, DimensionSpec> = {
     filterable: true,
   },
   warehouse: {
-    label: "Depozit",
-    key: (line) => line.warehouse,
+    label: "Gestiune",
+    key: (line) =>
+      line.warehouseId === null ? line.warehouse : `id:${line.warehouseId}`,
+    name: (line) => line.warehouse,
     filterable: true,
   },
   docType: {
@@ -425,6 +428,79 @@ export function dimensionValues(lines: SaleLine[], dimension: Dimension) {
     name,
     net: metrics.net,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Part-to-whole
+
+export const OTHER_KEY = "__other";
+
+export interface Share {
+  key: string;
+  name: string;
+  value: number;
+  /** Percent of the total; null when the total isn't positive. */
+  share: number | null;
+  /** Color slot (0-based) for the top values; null when folded into "other". */
+  slot: number | null;
+}
+
+/**
+ * Each value's share of the total, largest first. The top `slots` values of
+ * `paletteLines` keep their slot (and color) while the view is refined; the
+ * rest fold into one "other" segment. Negative values can't be parts of a
+ * whole, so then there are no segments, only rows.
+ */
+export function composition(
+  lines: SaleLine[],
+  dimension: Dimension,
+  metric: MetricKey,
+  paletteLines: SaleLine[] = lines,
+  slots = 3,
+) {
+  const groups = groupLines(lines, dimension, metric);
+  const total = groups.reduce(
+    (sum, group) => sum + metricValue(group.metrics, metric),
+    0,
+  );
+  const shareOf = (value: number) => (total > 0 ? (value / total) * 100 : null);
+  const palette = groupLines(paletteLines, dimension, metric)
+    .slice(0, slots)
+    .map((group) => group.key);
+  const rows: Share[] = groups.map((group) => {
+    const value = metricValue(group.metrics, metric);
+    const slot = palette.indexOf(group.key);
+    return {
+      key: group.key,
+      name: group.name,
+      value,
+      share: shareOf(value),
+      slot: slot < 0 ? null : slot,
+    };
+  });
+  const stackable = total > 0 && rows.every((row) => row.value >= 0);
+  const folded = rows.filter((row) => row.slot === null);
+  const otherValue = folded.reduce((sum, row) => sum + row.value, 0);
+  // Slot order, not current rank, so neighboring colors never change.
+  const segments: Share[] = stackable
+    ? [
+        ...palette.flatMap((key) =>
+          rows.filter((row) => row.key === key && row.value > 0),
+        ),
+        ...(otherValue > 0
+          ? [
+              {
+                key: OTHER_KEY,
+                name: folded.length === 1 ? folded[0]!.name : "Altele",
+                value: otherValue,
+                share: shareOf(otherValue),
+                slot: null,
+              },
+            ]
+          : []),
+      ]
+    : [];
+  return { total, rows, segments, folded: folded.length };
 }
 
 // ---------------------------------------------------------------------------
