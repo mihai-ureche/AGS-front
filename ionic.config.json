@@ -1,5 +1,0 @@
-{
-  "name": "AGS Insights",
-  "type": "react-vite",
-  "integrations": { "capacitor": {} }
-}

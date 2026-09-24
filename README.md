@@ -1,122 +1,87 @@
 # AGS Insights
 
-A responsive sales workspace built with React, TypeScript, Vite, Ionic React, and Capacitor. Includes Microsoft sign-in, sales charts, period comparisons, searchable orders, product/customer reporting, and CSV export.
+Web frontend for [AGS-backend](../AGS-backend). Users sign in with their Microsoft work account. What they see depends on the role and entity grants stored in the backend:
 
-**Sales data is currently sample data, including after Microsoft sign-in.** Authentication is wired to Microsoft Entra; you must supply an app registration before real sign-in can work. No backend or real sales integration is included.
+| Page      | Shown with   | What it does                                                                                                                                                           |
+| --------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Sales** | `sales:read` | Dashboard over Borg product lines for the entities granted to you: KPIs, trend, breakdowns with two-level grouping, weekday × hour heatmap, line detail and CSV export |
+| **Users** | `users:read` | Assign roles and entity access, activate/deactivate and soft-delete users (`admin` only)                                                                               |
+| **Roles** | `roles:read` | Inspect roles and their permissions; create and delete custom roles (`admin` only)                                                                                     |
+
+Navigation mirrors the permissions from `GET /api/me`. The backend enforces every permission independently. Signed-in users whose role grants none of these see a "waiting for access" screen with their AGS user ID.
+
+Built with React, TypeScript, Vite, MSAL Browser and Recharts. There is no sample or demo data.
 
 ## Run locally
 
-Use Node.js 22.12+ (the repository pins the Node 22 line).
+Use Node.js 22.12+ and a running AGS-backend.
 
 ```bash
 npm ci
-cp .env.example .env
+cp .env.example .env   # fill in the values below
 npm run dev
 ```
 
-Open <http://localhost:5173>. Select **Explore the demo** to try the workspace without credentials. Demo sessions live in memory and end on refresh. Set `VITE_ENABLE_DEMO=false` to hide demo access. All `VITE_` values are public build-time configuration, so never put secrets in them.
+Open <http://localhost:5173>.
 
-## Microsoft sign-in on the web
+| Variable                      | Value                                                                 |
+| ----------------------------- | --------------------------------------------------------------------- |
+| `VITE_MICROSOFT_CLIENT_ID`    | Application (client) ID of the Entra SPA registration                 |
+| `VITE_MICROSOFT_TENANT_ID`    | Directory (tenant) ID; must match the backend's `MICROSOFT_TENANT_ID` |
+| `VITE_API_URL`                | Backend origin without a trailing slash, e.g. `http://localhost:3000` |
+| `VITE_MICROSOFT_REDIRECT_URI` | Optional; defaults to the current origin followed by `/`              |
 
-1. In [Microsoft Entra app registrations](https://entra.microsoft.com/), create an application. For an internal business app, choose accounts in your organization only.
-2. Under **Authentication → Add a platform → Single-page application**, register `http://localhost:5173/` and your exact production URL, such as `https://ags-insights.onrender.com/`. Include the trailing slash. For local production preview, also register `http://localhost:4173/` if you intend to sign in there.
-3. Copy **Application (client) ID** and **Directory (tenant) ID** into `.env`:
+All `VITE_` values are public build-time configuration; never put secrets in them. The app shows a configuration screen when a required value is missing.
 
-   ```dotenv
-   VITE_MICROSOFT_CLIENT_ID=your-application-client-id
-   VITE_MICROSOFT_TENANT_ID=your-directory-tenant-id
-   ```
+The backend must allow this origin in `FRONTEND_ORIGINS` (e.g. `http://localhost:5173`).
 
-4. Restart Vite. Choose **Continue with Microsoft**.
+## Microsoft Entra setup
 
-Web sign-in uses MSAL authorization code flow with PKCE and session storage. The redirect defaults to the current origin plus `/`; `VITE_MICROSOFT_REDIRECT_URI` can override it. Do not create a client secret or enable implicit token grants for this SPA. The app uses organizational accounts by default; broader account audiences also require matching Entra registration settings.
+1. Register a single-tenant application (accounts in your organizational directory only).
+2. Under **Authentication → Single-page application**, add `http://localhost:5173/` and your production URL, including the trailing slash.
+3. Add Microsoft Graph delegated permission **User.Read** (your tenant may require admin consent).
+4. Don't create a client secret or enable implicit grants.
 
-Sign-out on web redirects through Microsoft. Actual tenant consent policies and organizational access must be tested with your account. Browser UI access is not an API authorization boundary: a future backend must validate access tokens, audience, issuer, scopes, and roles.
+Sign-in uses MSAL's authorization code flow with PKCE, with the cache in session storage. The app acquires a Graph `User.Read` token and sends it to the backend as a bearer token. The backend validates it with Graph and loads the role, permissions and entity grants from PostgreSQL. After sign-in the app calls `POST /api/users` to create or refresh the user row, then `GET /api/me`. A `401` triggers one silent token refresh and a retry.
+
+### First administrator
+
+Every new user starts with the `user` role and no entity grants. To bootstrap:
+
+1. Sign in once; the waiting screen shows **Your AGS user ID**.
+2. In AGS-backend run `npm run user:role -- <that-id> admin`.
+3. Select **Check again**. Admins still need entity grants to read sales: open **Users**, select yourself and tick the entities. The Sales page links there when you have none.
+
+## Sales dashboard
+
+The query bar at the top loads data from `GET /api/borg/sales`. The refine bar below it filters the loaded lines in the browser.
+
+- **Query:** entity (only granted ones), date range (presets or custom, up to 366 days), document type (BFD receipts / AIM delivery notes), warehouse ID (`gestiune`), include transfers, and compare with the previous period of equal length. These settings live in the URL hash, so views can be bookmarked and shared.
+- **Long ranges:** the backend accepts at most 30 days within one calendar year per request. Longer ranges are split into consecutive requests and loaded one after another with a progress bar. Each request uses the backend's maximum `limit` of 50,000 lines. A request that returns exactly the limit shows a "may be incomplete" warning. A 502/503 from Borg is retried once.
+- **Refine:** search (product, code, client, document, invoice), sales vs returns, and filters on product, category, warehouse, document type, channel, client, operator, agent and VAT rate.
+- **Measure:** net sales, gross sales (incl. VAT), gross margin, quantity or documents. The choice drives the trend, breakdown bars and heatmap.
+- **Breakdown:** group by any dimension (including day, week, month, weekday, hour), optionally "then by" a second one. Rows expand, columns sort, and the result exports to CSV. The line table exports every refined line with all fields.
+
+Metric definitions: **documents** counts distinct `documentId`. **Margin %** is margin ÷ net, computed only over lines where Borg supplies a margin or cost; the KPI shows how much of net sales that covers. **Returns** are lines with a negative value or quantity. Values are shown in RON exactly as Borg returns them.
+
+Loaded lines stay in memory for the browser tab only: switching pages doesn't refetch, and **Reload** fetches fresh data. Sales data is never written to browser storage.
 
 ## Deploy on Render
 
-The repository includes [render.yaml](./render.yaml) for a **Render Static Site**.
+`render.yaml` defines a **Static Site**: build `npm ci && npm run build`, publish `dist`, rewrite `/*` to `/index.html`. Set `VITE_MICROSOFT_CLIENT_ID`, `VITE_MICROSOFT_TENANT_ID` and `VITE_API_URL` in Render, then register the Render URL as an Entra SPA redirect URI and add it to the backend's `FRONTEND_ORIGINS`. Rebuild after changing any `VITE_` value.
 
-1. Push the repository to your Git provider and create a Render Blueprint from it, or create a Static Site manually.
-2. Use build command `npm ci && npm run build` and publish directory `dist`.
-3. Add `VITE_MICROSOFT_CLIENT_ID` and `VITE_MICROSOFT_TENANT_ID` in Render. The Blueprint disables demo access with `VITE_ENABLE_DEMO=false`.
-4. Register the assigned Render URL under the Entra **Single-page application** platform as described above.
-5. Deploy. Rebuild after changing any `VITE_` values.
-
-The Blueprint includes the `/*` → `/index.html` rewrite and basic response headers. The app supports deployment at the domain root. Vite generates the static assets; no Vite development server or Node web service runs in production.
-
-## Android and iOS with Ionic / Capacitor
-
-The same React UI is packaged into native apps using Ionic React and Capacitor. `capacitor.config.ts` points to Vite's `dist` output. Native projects are generated on demand; choose your final application ID before generating them. Capacitor 7 is used to match the native OAuth plugin's documented supported version.
-
-### Create and open the projects
-
-Install Android Studio and the Android SDK for Android, or Xcode and its command-line tools plus CocoaPods for iOS. Check the [Capacitor 7 environment requirements](https://capacitorjs.com/docs/v7/getting-started/environment-setup) for supported toolchain versions. iOS builds require macOS.
-
-```bash
-# Once per platform; commit the generated android/ and ios/ folders afterward.
-npm run mobile:add:android
-npm run mobile:add:ios
-
-# After making web changes, rebuild, sync, and open the native IDE.
-npm run mobile:android
-npm run mobile:ios
-
-# Build and synchronize without opening an IDE.
-npm run mobile:sync
-```
-
-### Native Microsoft callback setup
-
-Native sign-in uses `@capacitor-community/generic-oauth2`, the system authentication browser, authorization code + PKCE, and Microsoft Graph `/me`. It does not run MSAL Browser inside the native webview.
-
-1. In your Entra app registration, add a **Mobile and desktop applications** platform and register the custom redirect URI `com.ags.insights://oauth/redirect`. Keep this separate from the SPA redirect URIs. Add Microsoft Graph **delegated** `User.Read` permission for the native profile request and obtain consent according to your tenant policy.
-2. Set `VITE_MICROSOFT_NATIVE_REDIRECT_URI=com.ags.insights://oauth/redirect` in the environment used to build native assets (already provided in `.env.example`).
-3. In generated `android/app/build.gradle`, add this inside `android.defaultConfig`:
-
-   ```groovy
-   manifestPlaceholders = [appAuthRedirectScheme: "com.ags.insights"]
-   ```
-
-4. In `android/app/src/main/res/values/strings.xml`, set `custom_url_scheme` to `com.ags.insights`. If adding a VIEW intent filter to the main activity, set its data to `<data android:scheme="@string/custom_url_scheme" android:host="oauth" />`, following the [plugin's Android setup](https://github.com/capacitor-community/generic-oauth2#platform-android). The AppAuth callback activity comes from the plugin's merged manifest.
-5. In generated `ios/App/App/Info.plist`, register the callback scheme:
-
-   ```xml
-   <key>CFBundleURLTypes</key>
-   <array>
-     <dict>
-       <key>CFBundleURLSchemes</key>
-       <array><string>com.ags.insights</string></array>
-     </dict>
-   </array>
-   ```
-
-6. Run `npm run mobile:sync`, then build and test sign-in, cancellation, and callback handling on real devices. Changing the application ID or callback scheme requires updating all matching native and Entra settings.
-
-The starter retains only the native user profile in memory and does not persist native access/refresh tokens. Native sign-out ends the app session; Microsoft SSO cookies in the system browser remain. The next sign-in shows the account selector. A future authenticated API integration needs token acquisition/renewal and appropriate secure native storage. CSV exports use a browser download on web and Capacitor's filesystem cache plus the native share sheet on Android/iOS. Include the Filesystem plugin's required Apple privacy manifest declaration when preparing an App Store release; see the [plugin documentation](https://capacitorjs.com/docs/v7/apis/filesystem).
-
-For an existing Ionic Appflow account, connect this repository as a Capacitor application, supply the same public build environment variables, commit configured native projects, and use `npm run build` for the web build. Configure Android signing / iOS provisioning in your native CI provider. Native binaries use bundled assets and are distributed through their stores; Render serves the web app. Local Android Studio/Xcode builds work independently of Appflow.
-
-## Checks and project layout
+## Checks and layout
 
 ```bash
 npm run lint
-npm test
-npm run build
-npx playwright install chromium
-npm run test:e2e
+npm test         # unit tests: date chunking, aggregation, filters, CSV, URL params
+npm run build    # type-checks, then builds
 ```
 
-- `src/auth/AuthProvider.tsx`: web/native Microsoft sign-in and explicit demo mode.
-- `src/lib/sales.ts`: deterministic sample data, reporting calculations, and CSV escaping.
-- `src/App.tsx`: responsive workspace and reporting views.
-- `src/styles.css`: desktop/mobile layouts and visual styles.
-- `tests/app.spec.ts`: desktop and mobile browser checks.
-- `render.yaml`: static deployment configuration.
-- `capacitor.config.ts`, `ionic.config.json`: native application workflow.
-
-Revenue excludes processing and refunded orders. Average order value uses completed orders only. Total orders and unique customers include all statuses. Comparisons use the immediately preceding period of equal length. Dates follow the device's local calendar. CSV export includes all orders in the selected date range, regardless of the table search/status filters. Currency is EUR.
-
-To connect real data, replace the sample data source with an authenticated API and keep reporting calculations in `src/lib/sales.ts`. Microsoft sign-in does not provide sales data by itself. The app currently uses Google Fonts with system-font fallbacks; bundle licensed font assets locally if offline typography is required.
-
-Reference documentation: [MSAL initialization](https://learn.microsoft.com/en-us/entra/msal/javascript/browser/initialization), [Render static sites](https://render.com/docs/static-sites), [Capacitor workflow](https://capacitorjs.com/docs/basics/workflow), and [native OAuth plugin](https://github.com/capacitor-community/generic-oauth2).
+- `src/auth/`: MSAL sign-in (`msal.ts`) and the backend session (`AuthProvider.tsx`)
+- `src/api/`: fetch client, endpoint wrappers and backend types
+- `src/admin/`: shared users/roles state for the admin pages
+- `src/lib/sales.ts`: Borg line normalization, dimensions, metrics, grouping, time series
+- `src/lib/dates.ts`: presets, 30-day request chunking, previous period
+- `src/pages/`: Sales (`sales/` holds its panels), Users, Roles and the sign-in/access screens
+- `src/styles.css`: tokens (light and dark) and layout
