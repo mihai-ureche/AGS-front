@@ -26,10 +26,16 @@ export type SplitBy =
   | "none"
   | Extract<
       Dimension,
-      "docType" | "warehouse" | "category" | "channel" | "client"
+      | "revenueGroup"
+      | "docType"
+      | "warehouse"
+      | "category"
+      | "channel"
+      | "client"
     >;
 export const splitOptions: { value: SplitBy; label: string }[] = [
   { value: "none", label: "Fără împărțire" },
+  { value: "revenueGroup", label: "Tip venit" },
   { value: "docType", label: "Tip document" },
   { value: "warehouse", label: "Gestiune" },
   { value: "category", label: "Categorie" },
@@ -46,6 +52,13 @@ export const SERIES_COLORS = [
   "var(--series-3)",
 ];
 export const OTHER_COLOR = "var(--series-other)";
+const revenueColors: Record<string, string> = {
+  utilaje: "var(--series-1)",
+  irigatii: "var(--series-2)",
+  piese: "var(--series-3)",
+  manopera: "#8b5cf6",
+  other: OTHER_COLOR,
+};
 
 type Series = { key: string; name: string; color: string };
 
@@ -79,12 +92,16 @@ export function TrendChart({
         { key: "value", name: "Perioada curentă", color: SERIES_COLORS[0]! },
       ];
     const groups = groupLines(paletteLines, split, metric);
-    const top = groups.slice(0, 3).map((group, index) => ({
+    const count = split === "revenueGroup" ? groups.length : 3;
+    const top = groups.slice(0, count).map((group, index) => ({
       key: `s:${group.key}`,
       name: group.name,
-      color: SERIES_COLORS[index]!,
+      color:
+        split === "revenueGroup"
+          ? (revenueColors[group.key] ?? OTHER_COLOR)
+          : SERIES_COLORS[index]!,
     }));
-    return groups.length > 3
+    return groups.length > count
       ? [...top, { key: "other", name: "Altele", color: OTHER_COLOR }]
       : top;
   }, [paletteLines, split, metric]);

@@ -338,3 +338,54 @@ describe("toCsv", () => {
     ]);
   });
 });
+
+describe("revenue groups", () => {
+  it("uses the backend classification for grouping, filtering and returns", () => {
+    const rows = normalizeLines([
+      {
+        ...base,
+        miscareId: 1,
+        grupa: "Utilaje",
+        revenueGroupId: "utilaje",
+        revenueGroupName: "Utilaje",
+        valoareNet: 100,
+      },
+      {
+        ...base,
+        miscareId: 2,
+        grupa: "Manipulare",
+        revenueGroupId: "manopera",
+        revenueGroupName: "Manoperă",
+        valoareNet: 20,
+      },
+      {
+        ...base,
+        miscareId: 3,
+        grupa: "Utilaje",
+        revenueGroupId: "utilaje",
+        revenueGroupName: "Utilaje",
+        valoareNet: -10,
+      },
+    ]);
+    expect(
+      groupLines(rows, "revenueGroup", "net").map((group) => [
+        group.key,
+        group.metrics.net,
+      ]),
+    ).toEqual([
+      ["utilaje", 90],
+      ["manopera", 20],
+    ]);
+    expect(summarize(rows).net).toBe(110);
+    expect(
+      refineLines(rows, {
+        search: "",
+        kind: "all",
+        filters: { revenueGroup: ["manopera"] },
+      }).map((line) => line.id),
+    ).toEqual(["2"]);
+    expect(
+      normalizeLine({ ...base, grupa: "Utilaje" }, 0)?.revenueGroupId,
+    ).toBeNull();
+  });
+});

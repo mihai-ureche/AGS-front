@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { readParams, validateCustomRange, writeParams } from "./params";
 
 describe("sales URL params", () => {
-  it("defaults to the first granted entity and the last 30 days", () => {
+  it("defaults to the first granted entity and the current month", () => {
     const state = readParams(new URLSearchParams(), ["green", "babyhub"])!;
     expect(state.entity).toBe("green");
-    expect(state.range).toBe("last30");
+    expect(state.range).toBe("thisMonth");
     expect(state.compare).toBe(false);
   });
 
@@ -49,7 +49,7 @@ describe("sales URL params", () => {
       ),
       ["babyhub"],
     )!;
-    expect(state.range).toBe("last30");
+    expect(state.range).toBe("thisMonth");
     expect(state.docType).toBeUndefined();
     expect(state.gestiune).toBeUndefined();
   });

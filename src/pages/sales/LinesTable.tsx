@@ -114,6 +114,8 @@ export function LinesTable({
         "Cod produs",
         "Produs",
         "Categorie",
+        "Tip venit",
+        "ID tip venit",
         "UM",
         "Cantitate",
         `Preț unitar net (${currency})`,
@@ -144,6 +146,8 @@ export function LinesTable({
         line.productCode,
         line.product,
         line.category,
+        line.revenueGroup,
+        line.revenueGroupId,
         line.unit,
         line.quantity,
         amount(line.unitPrice, 4),
@@ -221,7 +225,11 @@ export function LinesTable({
                 <td className="product-cell" title={line.product}>
                   <span className="truncate">{line.product}</span>
                   <small className="muted">
-                    {[line.productCode, line.category]
+                    {[
+                      line.productCode,
+                      line.category,
+                      line.revenueGroupId ? line.revenueGroup : null,
+                    ]
                       .filter(Boolean)
                       .join(" · ")}
                   </small>

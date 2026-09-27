@@ -12,6 +12,7 @@ import {
   NoAccessScreen,
   SetupScreen,
 } from "./pages/Gates";
+import { RevenueGroupsPage } from "./pages/RevenueGroupsPage";
 import { RolesPage } from "./pages/RolesPage";
 import { SalesPage } from "./pages/SalesPage";
 import { UsersPage } from "./pages/UsersPage";
@@ -28,7 +29,18 @@ export default function App() {
     case "error":
       return <BlockedScreen message={session.message} tone={session.status} />;
     case "ready":
-      return <Workspace />;
+      return (
+        <Workspace
+          key={JSON.stringify([
+            session.me.tenantId,
+            session.me.id,
+            session.me.role,
+            session.me.permissions,
+            session.me.salesGroups,
+            session.me.targetEntities,
+          ])}
+        />
+      );
   }
 }
 
@@ -37,6 +49,11 @@ function Workspace() {
   const { page, navigate } = useRoute();
   // Navigation mirrors backend permissions; the backend enforces them independently.
   const adminPages: NavLink[] = [
+    can("users:roles:update") && {
+      page: "revenue-groups",
+      label: "Grupe de venit",
+      icon: navIcons.sales,
+    },
     can("users:read") && {
       page: "users",
       label: "Utilizatori",
@@ -79,6 +96,8 @@ function Workspace() {
       <SalesPage />
     ) : current === "users" ? (
       <UsersPage />
+    ) : current === "revenue-groups" ? (
+      <RevenueGroupsPage />
     ) : (
       <RolesPage />
     );

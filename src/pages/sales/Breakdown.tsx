@@ -98,6 +98,7 @@ export function Breakdown({
   onFocus,
   total,
   filename,
+  revenueEnabled,
 }: {
   lines: SaleLine[];
   metric: MetricKey;
@@ -109,6 +110,7 @@ export function Breakdown({
   onFocus: (dimension: Dimension, key: string) => void;
   total: Metrics;
   filename: string;
+  revenueEnabled: boolean;
 }) {
   const { currency, convert, money } = useCurrency();
   const [sort, setSort] = useState<Sort>(null);
@@ -117,6 +119,9 @@ export function Breakdown({
   const metricInfo = metricOptions.find((option) => option.key === metric)!;
   const format = (value: number) =>
     metricInfo.money ? money(value) : number(value);
+  const availableDimensions = groupableDimensions.filter(
+    (item) => revenueEnabled || item !== "revenueGroup",
+  );
   const focusable = (item: Dimension) => dimensions[item].filterable;
 
   const groups = useMemo(
@@ -226,7 +231,7 @@ export function Breakdown({
                 setExpanded(new Set());
               }}
             >
-              {groupableDimensions.map((item) => (
+              {availableDimensions.map((item) => (
                 <option key={item} value={item}>
                   {dimensions[item].label}
                 </option>
@@ -244,7 +249,7 @@ export function Breakdown({
               }}
             >
               <option value="none">—</option>
-              {groupableDimensions
+              {availableDimensions
                 .filter((item) => item !== dimension)
                 .map((item) => (
                   <option key={item} value={item}>

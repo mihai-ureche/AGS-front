@@ -18,12 +18,21 @@ import {
   permissionLabel,
   roleNamePattern,
 } from "../lib/labels";
+import { SalesGroupPicker } from "./SalesGroupPicker";
 import { plural } from "../lib/format";
 
 export function RolesPage() {
   const { can } = useSession();
-  const { roles, roleCounts, loading, error, reload, deleteRole } =
-    useAdminData();
+  const {
+    roles,
+    roleCounts,
+    revenueGroups,
+    loading,
+    error,
+    reload,
+    deleteRole,
+  } = useAdminData();
+  const [editing, setEditing] = useState<Role | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [notice, setNotice] = useState<{
@@ -142,8 +151,32 @@ export function RolesPage() {
                 ) : (
                   <p className="muted">Nicio permisiune.</p>
                 )}
+                {role.permissions.includes("sales:read") && (
+                  <p className="muted">
+                    Tip venit:{" "}
+                    {role.salesGroups === null
+                      ? "Toate grupele"
+                      : role.salesGroups.length
+                        ? role.salesGroups
+                            .map(
+                              (id) =>
+                                revenueGroups.find((group) => group.id === id)
+                                  ?.name ?? id,
+                            )
+                            .join(", ")
+                        : "Fără acces la vânzări"}
+                  </p>
+                )}
                 {canManage && !builtIn && (
                   <footer>
+                    {role.permissions.includes("sales:read") && (
+                      <button
+                        className="button button-secondary"
+                        onClick={() => setEditing(role)}
+                      >
+                        Acces la grupe
+                      </button>
+                    )}
                     <button
                       className="button button-danger-ghost"
                       disabled={count > 0 || deleting === role.name}
@@ -176,6 +209,13 @@ export function RolesPage() {
         <EmptyState icon={ShieldCheck} title="Nu s-au găsit roluri" />
       ) : null}
 
+      {editing && (
+        <EditSalesGroupsDialog
+          key={editing.name}
+          role={editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
       {canManage && (
         <CreateRoleDialog
           open={creating}
@@ -201,9 +241,11 @@ function CreateRoleDialog({
   onClose: () => void;
   onCreated: (role: Role) => void;
 }) {
-  const { roles, assignablePermissions, createRole } = useAdminData();
+  const { roles, revenueGroups, assignablePermissions, createRole } =
+    useAdminData();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [salesGroups, setSalesGroups] = useState<string[] | null>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -234,6 +276,7 @@ function CreateRoleDialog({
     setName("");
     setDescription("");
     setPermissions([]);
+    setSalesGroups([]);
     setTouched(false);
     setError(null);
   }
@@ -247,6 +290,7 @@ function CreateRoleDialog({
       const role = await createRole({
         name,
         description: description.trim(),
+        salesGroups: permissions.includes("sales:read") ? salesGroups : [],
         permissions: assignablePermissions.filter((permission) =>
           permissions.includes(permission),
         ),
@@ -360,8 +404,77 @@ function CreateRoleDialog({
             </div>
           ))}
         </fieldset>
+        {permissions.includes("sales:read") && (
+          <SalesGroupPicker
+            groups={revenueGroups}
+            value={salesGroups}
+            onChange={setSalesGroups}
+          />
+        )}
         <button type="submit" hidden />
       </form>
+    </Dialog>
+  );
+}
+
+function EditSalesGroupsDialog({
+  role,
+  onClose,
+}: {
+  role: Role;
+  onClose: () => void;
+}) {
+  const { revenueGroups, updateRoleSalesGroups } = useAdminData();
+  const [groups, setGroups] = useState(role.salesGroups);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      await updateRoleSalesGroups(role.name, groups);
+      onClose();
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <Dialog
+      open
+      onClose={() => {
+        if (!saving) onClose();
+      }}
+      title={`Acces la grupe · ${role.name}`}
+      description="Modificarea se aplică tuturor utilizatorilor cu acest rol la următoarea cerere de date."
+      footer={
+        <>
+          <button
+            className="button button-secondary"
+            disabled={saving}
+            onClick={onClose}
+          >
+            Anulează
+          </button>
+          <button
+            className="button button-primary"
+            disabled={saving}
+            onClick={() => void save()}
+          >
+            {saving ? "Se salvează…" : "Salvează accesul"}
+          </button>
+        </>
+      }
+    >
+      {error && <Alert tone="error">{error}</Alert>}
+      <fieldset disabled={saving} className="revenue-role-fields">
+        <SalesGroupPicker
+          groups={revenueGroups}
+          value={groups}
+          onChange={setGroups}
+        />
+      </fieldset>
     </Dialog>
   );
 }
