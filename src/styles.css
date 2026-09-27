@@ -2208,3 +2208,9 @@ input[role="switch"]:disabled {
     font-size: 12px;
   }
 }
+
+.category-usage th[scope="row"] {
+  width: 1%;
+  white-space: nowrap;
+  vertical-align: top;
+}
