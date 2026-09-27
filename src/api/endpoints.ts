@@ -6,6 +6,9 @@ import type {
   SalesQuery,
   TargetEntity,
   User,
+  RevenueConfiguration,
+  SalesAccess,
+  SalesResponse,
 } from "./types";
 
 const USERS_PAGE = 100;
@@ -67,13 +70,62 @@ export function deleteRole(api: Api, name: string) {
   return api.delete(`/api/roles/${encodeURIComponent(name)}`);
 }
 
-/** Raw Borg product lines; the backend passes them through unchanged. */
+export function getSalesAccess(
+  api: Api,
+  targetEntity: TargetEntity,
+  signal?: AbortSignal,
+) {
+  return api.get<SalesAccess>("/api/revenue-groups", {
+    query: { targetEntity },
+    signal,
+  });
+}
+
+export function getRevenueConfiguration(
+  api: Api,
+  entity: TargetEntity,
+  signal?: AbortSignal,
+) {
+  return api.get<RevenueConfiguration>(`/api/admin/revenue-groups/${entity}`, {
+    signal,
+  });
+}
+
+export function updateRevenueConfiguration(
+  api: Api,
+  config: RevenueConfiguration,
+) {
+  const { enabled, revision, defaultGroupId, rules } = config;
+  return api.patch<RevenueConfiguration>(
+    `/api/admin/revenue-groups/${config.targetEntity}`,
+    {
+      body: { enabled, revision, defaultGroupId, rules },
+    },
+  );
+}
+
+export async function updateRoleSalesGroups(
+  api: Api,
+  name: string,
+  salesGroups: string[] | null,
+) {
+  return (
+    await api.patch<{ role: Role }>(
+      `/api/roles/${encodeURIComponent(name)}/sales-groups`,
+      {
+        body: { salesGroups },
+      },
+    )
+  ).role;
+}
+
+/** Classified, authorized lines with completeness metadata from the backend. */
 export function getSales(
   api: Api,
   query: SalesQuery & { limit: number },
   signal?: AbortSignal,
 ) {
-  return api.get<Record<string, unknown>[]>("/api/borg/sales", {
+  return api.get<SalesResponse>("/api/borg/sales", {
     query: {
       targetEntity: query.targetEntity,
       from: query.from,
@@ -82,6 +134,7 @@ export function getSales(
       gestiune: query.gestiune,
       limit: query.limit,
       includeTransfers: query.includeTransfers ?? false,
+      responseFormat: "grouped",
     },
     signal,
   });

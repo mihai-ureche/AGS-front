@@ -20,7 +20,7 @@ export interface SalesParams {
   compare: boolean;
 }
 
-export const DEFAULT_PRESET: PresetKey = "last30";
+export const DEFAULT_PRESET: PresetKey = "thisMonth";
 
 export function validateCustomRange(from: string, to: string): string | null {
   if (!isValidIso(from) || !isValidIso(to))

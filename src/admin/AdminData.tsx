@@ -9,7 +9,13 @@ import {
 import type { ReactNode } from "react";
 import { errorMessage, isAbort } from "../api/client";
 import * as endpoints from "../api/endpoints";
-import type { Permission, Role, TargetEntity, User } from "../api/types";
+import type {
+  Permission,
+  RevenueGroup,
+  Role,
+  TargetEntity,
+  User,
+} from "../api/types";
 import { useSession } from "../auth/AuthProvider";
 
 export type AccessChanges = {
@@ -21,6 +27,11 @@ export type AccessChanges = {
 type AdminData = {
   users: User[] | null;
   roles: Role[] | null;
+  revenueGroups: RevenueGroup[];
+  updateRoleSalesGroups: (
+    name: string,
+    groups: string[] | null,
+  ) => Promise<Role>;
   assignablePermissions: Permission[];
   loading: boolean;
   error: string | null;
@@ -38,6 +49,7 @@ const AdminContext = createContext<AdminData | null>(null);
 export function AdminDataProvider({ children }: { children: ReactNode }) {
   const { api, can, me, reload: reloadSession } = useSession();
   const [users, setUsers] = useState<User[] | null>(null);
+  const [revenueGroups, setRevenueGroups] = useState<RevenueGroup[]>([]);
   const [roles, setRoles] = useState<Role[] | null>(null);
   const [assignablePermissions, setAssignable] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,12 +67,20 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
         ? endpoints.listAllUsers(api, controller.signal)
         : Promise.resolve(null),
       canReadRoles
+        ? endpoints.getRevenueConfiguration(
+            api,
+            "agritehnica",
+            controller.signal,
+          )
+        : Promise.resolve(null),
+      canReadRoles
         ? endpoints.listRoles(api, controller.signal)
         : Promise.resolve(null),
     ])
-      .then(([nextUsers, roleData]) => {
+      .then(([nextUsers, revenueData, roleData]) => {
         setUsers(nextUsers);
         setRoles(roleData?.roles ?? null);
+        setRevenueGroups(revenueData?.groups ?? []);
         setAssignable(roleData?.assignablePermissions ?? []);
       })
       .catch((reason: unknown) => {
@@ -128,6 +148,18 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     [api],
   );
 
+  const updateRoleSalesGroups = useCallback(
+    async (name: string, groups: string[] | null) => {
+      const role = await endpoints.updateRoleSalesGroups(api, name, groups);
+      setRoles(
+        (list) =>
+          list?.map((item) => (item.name === name ? role : item)) ?? null,
+      );
+      return role;
+    },
+    [api],
+  );
+
   const deleteRole = useCallback(
     async (name: string) => {
       await endpoints.deleteRole(api, name);
@@ -148,6 +180,8 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const value: AdminData = {
     users,
     roles,
+    revenueGroups,
+    updateRoleSalesGroups,
     assignablePermissions,
     loading,
     error,

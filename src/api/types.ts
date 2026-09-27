@@ -22,6 +22,7 @@ export interface Me {
   role: string;
   isAdmin: boolean;
   permissions: Permission[];
+  salesGroups: string[] | null;
   targetEntities: TargetEntity[];
   isActive: boolean;
 }
@@ -46,6 +47,34 @@ export interface Role {
   name: string;
   description: string;
   permissions: Permission[];
+  /** null grants all groups; an empty list grants no sales groups. */
+  salesGroups: string[] | null;
+}
+
+export interface RevenueGroup {
+  id: string;
+  name: string;
+}
+export interface RevenueRule {
+  category: string;
+  groupId: string;
+}
+export interface RevenueConfiguration {
+  targetEntity: TargetEntity;
+  enabled: boolean;
+  revision: number;
+  defaultGroupId: string;
+  rules: RevenueRule[];
+  groups: RevenueGroup[];
+}
+export interface SalesAccess {
+  groups: RevenueGroup[];
+  accessVersion: string;
+}
+export interface SalesResponse {
+  lines: Record<string, unknown>[];
+  possiblyTruncated: boolean;
+  accessVersion: string;
 }
 
 export type DocType = "BFD" | "AIM";

@@ -11,6 +11,7 @@ import { ApiError, createApi, errorMessage } from "../api/client";
 import type { Api } from "../api/client";
 import { getMe, saveCurrentUser } from "../api/endpoints";
 import type { Me, Permission, User } from "../api/types";
+import { clearSalesCache } from "../pages/sales/salesLoader";
 import { config } from "../config";
 import { acquireToken, restoreAccount, signIn, signOut } from "./msal";
 
@@ -73,6 +74,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const reload = useCallback(async () => {
+    clearSalesCache();
+    setSession({ status: "loading" });
     const account = await restoreAccount();
     setSession(account ? await loadSession(account) : { status: "signed-out" });
   }, []);
@@ -83,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       api,
       reload,
       async login() {
+        clearSalesCache();
         try {
           await signIn();
         } catch {
@@ -94,6 +98,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       },
       async logout() {
+        clearSalesCache();
+        setSession({ status: "signed-out" });
         try {
           await signOut();
         } catch {

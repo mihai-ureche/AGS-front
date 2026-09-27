@@ -25,6 +25,8 @@ export interface SaleLine {
   productCode: string;
   product: string;
   category: string;
+  revenueGroupId: string | null;
+  revenueGroup: string;
   unit: string;
   quantity: number;
   unitPrice: number | null;
@@ -100,6 +102,8 @@ export function normalizeLine(
     productCode: text(raw.codProdus) ?? "",
     product: text(raw.produs) ?? text(raw.codProdus) ?? NONE,
     category: text(raw.grupa) ?? NONE,
+    revenueGroupId: text(raw.revenueGroupId),
+    revenueGroup: text(raw.revenueGroupName) ?? NONE,
     unit: text(raw.um) ?? "",
     quantity: num(raw.cantitate) ?? 0,
     unitPrice: num(raw.pretUnitarNet),
@@ -138,6 +142,7 @@ const weekdays = ["Lun", "Mar", "Mie", "Joi", "Vin", "Sâm", "Dum"];
 export const weekdayOf = (iso: string) => (parseIso(iso).getDay() + 6) % 7;
 
 export type Dimension =
+  | "revenueGroup"
   | "product"
   | "category"
   | "warehouse"
@@ -164,6 +169,12 @@ type DimensionSpec = {
 };
 
 export const dimensions: Record<Dimension, DimensionSpec> = {
+  revenueGroup: {
+    label: "Tip venit",
+    key: (line) => line.revenueGroupId ?? NONE,
+    name: (line) => line.revenueGroup,
+    filterable: true,
+  },
   product: {
     label: "Produs",
     key: (line) => line.productCode || line.product,

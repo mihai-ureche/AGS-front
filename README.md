@@ -58,7 +58,7 @@ The query bar at the top loads data from `GET /api/borg/sales`. The refine bar b
 
 - **Query:** entity (only granted ones), date range (presets or custom, up to 366 days), document type (BFD receipts / AIM delivery notes), warehouse ID (`gestiune`), include transfers, and compare with the previous period of equal length. These settings live in the URL hash, so views can be bookmarked and shared.
 - **Long ranges:** the backend accepts at most 30 days within one calendar year per request. Longer ranges are split into consecutive requests and loaded one after another with a progress bar. Each request uses the backend's maximum `limit` of 50,000 lines. A request that returns exactly the limit shows a "may be incomplete" warning. A 502/503 from Borg is retried once.
-- **Refine:** search (product, code, client, document, invoice), sales vs returns, a **Client** picker, and filters on product, category, gestiune, document type, channel, client, operator, agent and VAT rate.
+- **Refine:** search (product, code, client, document, invoice), sales vs returns, a **Tip venit** picker where grouping is enabled, and filters on product, category, gestiune, document type, channel, client, operator, agent and VAT rate.
 - **Gestiuni:** a part-to-whole panel shows each gestiune's share of the total for the chosen measure: a composition bar (top three in color, the rest folded into "Altele") and a table with every gestiune's value and share. Gestiuni are keyed by `gestiuneId`; `depozit` is their name.
 - **Clients:** grouped by Borg's `clientId` (then tax ID, then name), so different clients with the same name stay apart. Group the breakdown or split the trend by client; a breakdown row's filter button narrows the view to that one value.
 - **Measure:** net sales, gross sales (incl. VAT), gross margin, quantity or documents. The choice drives the trend, breakdown bars and heatmap.
@@ -68,7 +68,25 @@ Metric definitions: **documents** counts distinct `documentId`. **Margin %** is 
 
 **Currency:** Borg returns lei. The **Lei / Euro** switch at the top right shows every amount, chart and CSV export in euro at an editable rate (default 5,10 lei per euro, `DEFAULT_EUR_RATE` in `src/lib/currency.ts`). Lei exports keep Borg's exact values; euro exports are rounded to cents.
 
-Loaded lines stay in memory for the browser tab only: switching pages doesn't refetch, and **Reload** fetches fresh data. Sales data is never written to browser storage; only the currency choice and rate are remembered there, per browser.
+Loaded lines stay in a bounded memory cache for the browser tab. Access is checked before cached data is reused and when the tab gains focus; **Reload** fetches fresh data. Logout and session refresh clear cached sales. Sales data is never written to browser storage; only the currency choice and rate are remembered there, per browser.
+
+
+## Revenue groups and scoped roles
+
+Agritehnica sales are classified by the backend using persisted product-category
+rules: Utilaje → Utilaje; Irigații → Irigații; Alte materiale consumabile and
+Cheltuieli Diverse → Other; Manipulare → Manoperă; everything else → Piese.
+Green and BabyHub start with grouping disabled.
+
+Use **Administrare → Grupe de venit** to edit mappings. In **Roluri**, choose
+which groups a custom sales role may read, then assign that role and entity
+access in **Utilizatori**. The backend filters the response before any sales data
+reaches the browser. Existing roles retain their access during the upgrade;
+new roles need explicit group selections or **Toate grupele**.
+
+Deploy AGS-backend first so its startup schema upgrade and grouped sales API are
+available before deploying this frontend. See [revenue group details](docs/revenue-groups.md)
+for the API contract, migration behavior, and access rules.
 
 ## Deploy on Render
 

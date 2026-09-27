@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import { Filter, Search, UserRound, X } from "lucide-react";
+import { Filter, Search, X } from "lucide-react";
 import { Popover, Segmented } from "../../components/ui";
+import type { RevenueGroup } from "../../api/types";
 import { useCurrency } from "../../lib/currency";
 import { plural } from "../../lib/format";
 import {
@@ -19,10 +20,12 @@ const kindOptions: { value: LineKind; label: string }[] = [
 
 export function RefineBar({
   lines,
+  groups,
   refine,
   onChange,
 }: {
   lines: SaleLine[];
+  groups: RevenueGroup[];
   refine: Refine;
   onChange: (next: Refine) => void;
 }) {
@@ -47,7 +50,6 @@ export function RefineBar({
     return map;
   }, [lines, refine.filters]);
   const hasRefine = active.length > 0 || refine.search || refine.kind !== "all";
-  const clients = refine.filters.client ?? [];
 
   return (
     <div className="refine">
@@ -67,36 +69,50 @@ export function RefineBar({
             }
           />
         </label>
+        {groups.length > 0 && (
+          <label className="control control-select">
+            <select
+              aria-label="Tip venit"
+              value={
+                (refine.filters.revenueGroup?.length ?? 0) > 1
+                  ? "multiple"
+                  : (refine.filters.revenueGroup?.[0] ?? "")
+              }
+              onChange={(event) =>
+                setFilter(
+                  "revenueGroup",
+                  event.target.value ? [event.target.value] : [],
+                )
+              }
+            >
+              <option value="">Toate grupele de venit</option>
+              {(refine.filters.revenueGroup?.length ?? 0) > 1 && (
+                <option value="multiple" disabled>
+                  Grupe selectate ({refine.filters.revenueGroup?.length})
+                </option>
+              )}
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <Segmented
           label="Tip linie"
           value={refine.kind}
           options={kindOptions}
           onChange={(kind) => onChange({ ...refine, kind })}
         />
-        <Popover
-          label={
-            clients.length === 1
-              ? (names.get(`client|${clients[0]}`) ?? "Client")
-              : "Client"
-          }
-          icon={UserRound}
-          badge={clients.length > 1 ? clients.length : undefined}
-          className="client-popover"
-        >
-          {() => (
-            <div className="client-picker">
-              <ValuePicker
-                lines={lines}
-                dimension="client"
-                selected={clients}
-                onChange={(values) => setFilter("client", values)}
-              />
-            </div>
-          )}
-        </Popover>
         <Popover label="Filtru" icon={Filter} badge={active.length}>
           {() => (
-            <FilterPicker lines={lines} refine={refine} onChange={setFilter} />
+            <FilterPicker
+              lines={lines}
+              refine={refine}
+              onChange={setFilter}
+              revenueEnabled={groups.length > 0}
+            />
           )}
         </Popover>
         {hasRefine && (
@@ -139,6 +155,7 @@ export function RefineBar({
 }
 
 function FilterPicker({
+  revenueEnabled,
   lines,
   refine,
   onChange,
@@ -146,8 +163,11 @@ function FilterPicker({
   lines: SaleLine[];
   refine: Refine;
   onChange: (dimension: Dimension, values: string[]) => void;
+  revenueEnabled: boolean;
 }) {
-  const [dimension, setDimension] = useState<Dimension>("category");
+  const [dimension, setDimension] = useState<Dimension>(
+    revenueEnabled ? "revenueGroup" : "category",
+  );
   return (
     <div className="filter-picker">
       <div
@@ -155,22 +175,24 @@ function FilterPicker({
         role="tablist"
         aria-label="Dimensiune filtru"
       >
-        {filterableDimensions.map((item) => (
-          <button
-            key={item}
-            role="tab"
-            aria-selected={dimension === item}
-            className={dimension === item ? "is-selected" : ""}
-            onClick={() => setDimension(item)}
-          >
-            {dimensions[item].label}
-            {(refine.filters[item]?.length ?? 0) > 0 && (
-              <span className="control-count">
-                {refine.filters[item]!.length}
-              </span>
-            )}
-          </button>
-        ))}
+        {filterableDimensions
+          .filter((item) => revenueEnabled || item !== "revenueGroup")
+          .map((item) => (
+            <button
+              key={item}
+              role="tab"
+              aria-selected={dimension === item}
+              className={dimension === item ? "is-selected" : ""}
+              onClick={() => setDimension(item)}
+            >
+              {dimensions[item].label}
+              {(refine.filters[item]?.length ?? 0) > 0 && (
+                <span className="control-count">
+                  {refine.filters[item]!.length}
+                </span>
+              )}
+            </button>
+          ))}
       </div>
       <ValuePicker
         key={dimension}

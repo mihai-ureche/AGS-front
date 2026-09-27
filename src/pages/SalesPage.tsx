@@ -65,6 +65,7 @@ export function SalesPage() {
   }
   return (
     <SalesDashboard
+      key={state.entity}
       state={state}
       onChange={(next) =>
         navigate("sales", writeParams({ ...state, ...next }), true)
@@ -128,7 +129,12 @@ function SalesDashboard({
     });
   const [metric, setMetric] = useState<MetricKey>("net");
   const [split, setSplit] = useState<SplitBy>("none");
-  const [dimension, setDimension] = useState<Dimension>("category");
+  const [dimension, setDimension] = useState<Dimension>("revenueGroup");
+  const revenueEnabled = Boolean(data.groups?.length);
+  const activeDimension =
+    dimension === "revenueGroup" && !revenueEnabled ? "category" : dimension;
+  const activeSplit =
+    split === "revenueGroup" && !revenueEnabled ? "none" : split;
   const [thenBy, setThenBy] = useState<Dimension | "none">("none");
 
   // After a failed load, hide older data: it may belong to different filters.
@@ -249,6 +255,7 @@ function SalesDashboard({
         <>
           <div className="refine-header">
             <RefineBar
+              groups={data.groups ?? []}
               lines={current.lines}
               refine={refine}
               onChange={setRefine}
@@ -315,11 +322,13 @@ function SalesDashboard({
                           metricOptions.find((option) => option.key === metric)
                             ?.label
                         }
-                        {split === "none" && state.compare
+                        {activeSplit === "none" && state.compare
                           ? " comparativ cu perioada anterioară"
                           : ""}
-                        {split !== "none"
-                          ? `, primele 3 valori după ${splitOptions.find((option) => option.value === split)?.label.toLowerCase()}`
+                        {activeSplit !== "none"
+                          ? activeSplit === "revenueGroup"
+                            ? ", pe grupe de venit"
+                            : `, primele 3 valori după ${splitOptions.find((option) => option.value === activeSplit)?.label.toLowerCase()}`
                           : ""}
                       </p>
                     </div>
@@ -328,16 +337,22 @@ function SalesDashboard({
                         <span>Împarte după</span>
                         <select
                           className="control"
-                          value={split}
+                          value={activeSplit}
                           onChange={(event) =>
                             setSplit(event.target.value as SplitBy)
                           }
                         >
-                          {splitOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
+                          {splitOptions
+                            .filter(
+                              (option) =>
+                                revenueEnabled ||
+                                option.value !== "revenueGroup",
+                            )
+                            .map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
                         </select>
                       </label>
                     </div>
@@ -347,7 +362,7 @@ function SalesDashboard({
                     paletteLines={current.lines}
                     range={current.range}
                     metric={metric}
-                    split={split}
+                    split={activeSplit}
                     previous={
                       previous && previousLines
                         ? { lines: previousLines, range: previous.range }
@@ -366,8 +381,13 @@ function SalesDashboard({
                 <Breakdown
                   lines={lines}
                   metric={metric}
-                  dimension={dimension}
-                  thenBy={thenBy}
+                  dimension={activeDimension}
+                  revenueEnabled={revenueEnabled}
+                  thenBy={
+                    thenBy === "revenueGroup" && !revenueEnabled
+                      ? "none"
+                      : thenBy
+                  }
                   onDimension={(next) => {
                     setDimension(next);
                     if (thenBy === next) setThenBy("none");
