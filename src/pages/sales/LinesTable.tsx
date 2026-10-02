@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, Download } from "lucide-react";
 import { downloadCsv } from "../../lib/csv";
 import { useCurrency } from "../../lib/currency";
 import { number, plural, shortDate } from "../../lib/format";
-import { documentLabel } from "../../lib/sales";
+import { documentLabel, isReturn } from "../../lib/sales";
 import type { SaleLine } from "../../lib/sales";
 
 type SortKey = "date" | "net" | "quantity" | "margin" | "product";
@@ -127,6 +127,9 @@ export function LinesTable({
         `Cost (${currency})`,
         `Marjă (${currency})`,
         "Factură",
+        "Sursă",
+        "Discount comercial",
+        "Ajustare reconciliere business",
       ],
       ...sorted.map((line) => [
         line.date,
@@ -159,6 +162,9 @@ export function LinesTable({
         amount(line.cost),
         amount(line.margin),
         line.invoice,
+        line.source ?? "borg",
+        line.isDiscount ? "da" : "nu",
+        line.isReconciliationAdjustment ? "da" : "nu",
       ]),
     ]);
   }
@@ -200,7 +206,7 @@ export function LinesTable({
           </thead>
           <tbody>
             {visible.map((line) => (
-              <tr key={line.id} className={line.net < 0 ? "is-return" : ""}>
+              <tr key={line.id} className={isReturn(line) ? "is-return" : ""}>
                 <td className="nowrap">
                   {shortDate(line.date)}
                   {line.hour !== null && (

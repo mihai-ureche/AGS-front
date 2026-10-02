@@ -88,8 +88,7 @@ function SalesHeading({
       <div>
         <h1>Vânzări</h1>
         <p>
-          {subtitle ??
-            "Linii de produs din Borg: bonuri fiscale (BFD) și avize (AIM)."}
+          {subtitle ?? "Vânzări din Borg și rapoarte reconciliate cu business."}
         </p>
       </div>
       {(status || actions) && (
@@ -153,6 +152,15 @@ function SalesDashboard({
     () => (previousLines ? summarize(previousLines) : undefined),
     [previousLines],
   );
+  const visibleReports =
+    current?.reconciliations.filter((report) =>
+      lines.some(
+        (line) =>
+          line.source === "business-report" &&
+          line.revenueGroupId === report.groupId &&
+          line.date.startsWith(report.month),
+      ),
+    ) ?? [];
 
   const loading = data.status === "loading";
   const rangeLabel =
@@ -280,6 +288,19 @@ function SalesDashboard({
             className={`dashboard-body ${loading ? "is-stale" : ""}`}
             aria-busy={loading}
           >
+            {visibleReports.length > 0 && (
+              <Alert tone="info" title="Vânzări reconciliate cu business">
+                {visibleReports
+                  .map(
+                    (report) =>
+                      `${data.groups?.find((group) => group.id === report.groupId)?.name ?? report.groupId} · ${report.month}`,
+                  )
+                  .join(", ")}{" "}
+                folosesc rapoartele business. Discounturile și stornările sunt
+                incluse în net; diferențele de rotunjire sunt afișate ca linii
+                de reconciliere în tabel și în CSV.
+              </Alert>
+            )}
             {!current.lines.length ? (
               <section className="panel">
                 <EmptyState

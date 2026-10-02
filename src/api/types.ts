@@ -75,6 +75,19 @@ export interface SalesResponse {
   lines: Record<string, unknown>[];
   possiblyTruncated: boolean;
   accessVersion: string;
+  reconciliations?: SalesReconciliation[];
+}
+
+export interface SalesReconciliation {
+  targetEntity: TargetEntity;
+  groupId: string;
+  month: string;
+  label: string;
+  revision: string;
+  salesBeforeDiscounts: number;
+  discounts: number;
+  csvSalesBeforeDiscounts: number;
+  csvDiscounts: number;
 }
 
 export type DocType = "BFD" | "AIM";

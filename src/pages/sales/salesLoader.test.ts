@@ -44,6 +44,45 @@ const load = (api: Api, compare = false) =>
 afterEach(clearSalesCache);
 
 describe("sales cache and access", () => {
+  it("keeps business provenance when a reconciled month spans cached chunks", async () => {
+    const { api, get, state } = mockApi();
+    const report = {
+      targetEntity: "agritehnica",
+      groupId: "piese",
+      month: "2026-09",
+      label: "Raport business",
+      revision: "report-v1",
+      salesBeforeDiscounts: 5387882.07,
+      discounts: 227735,
+      csvSalesBeforeDiscounts: 5387882.17,
+      csvDiscounts: 227735.06,
+    };
+    get.mockImplementation(async (path) =>
+      path === "/api/revenue-groups"
+        ? {
+            accessVersion: state.version,
+            groups: [{ id: "piese", name: "Piese" }],
+          }
+        : {
+            accessVersion: state.version,
+            lines: state.lines,
+            possiblyTruncated: false,
+            reconciliations: [report],
+          },
+    );
+    const result = await loadSales(
+      api,
+      { ...query, to: "2026-10-01" },
+      false,
+      new AbortController().signal,
+      () => {},
+    );
+    expect(result.current.reconciliations).toEqual([report]);
+    expect(
+      get.mock.calls.filter(([path]) => path === "/api/borg/sales"),
+    ).toHaveLength(2);
+  });
+
   it("revalidates access before cached reads and never shares chunks between scopes", async () => {
     const { api, get, state } = mockApi();
     await load(api);

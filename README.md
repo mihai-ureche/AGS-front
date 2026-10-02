@@ -66,6 +66,18 @@ The query bar at the top loads data from `GET /api/borg/sales`. The refine bar b
 
 Metric definitions: **documents** counts distinct `documentId`. **Margin %** is margin ÷ net, computed only over lines where Borg supplies a margin or cost; the KPI shows how much of net sales that covers. **Returns** are lines with a negative value or quantity.
 
+**Reconciled business reports:** the backend can supply private, authoritative
+Piese reports for a closed month. The dashboard labels this source and uses its
+lines consistently in KPIs, charts, tables and CSV exports. A **Discounturi** tile
+shows commercial discounts and the sales amount before them; discounts and
+business rounding adjustments are excluded from returned-goods counts. Net sales
+include signed `AIMS` reversals. For September 2026 the business markers are
+5,387,882.07 lei before discounts, 227,735.00 lei discounts and 5,160,147.07 lei net.
+The backend import keeps the CSV's −0.10 lei sales and +0.06 lei discount differences
+as explicit reconciliation entries. This requires the updated AGS-backend and its
+private report file; no business report data belongs in frontend assets. Warehouse
+queries and requests including internal transfers continue using live Borg data.
+
 **Currency:** Borg returns lei. The **Lei / Euro** switch at the top right shows every amount, chart and CSV export in euro at an editable rate (default 5,10 lei per euro, `DEFAULT_EUR_RATE` in `src/lib/currency.ts`). Lei exports keep Borg's exact values; euro exports are rounded to cents.
 
 Loaded lines stay in a bounded memory cache for the browser tab. Access is checked before cached data is reused and when the tab gains focus; **Reload** fetches fresh data. Logout and session refresh clear cached sales. Sales data is never written to browser storage; only the currency choice and rate are remembered there, per browser.

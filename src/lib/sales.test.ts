@@ -9,6 +9,7 @@ import {
   normalizeLines,
   refineLines,
   summarize,
+  salesBeforeDiscounts,
   timeSeries,
 } from "./sales";
 
@@ -121,6 +122,66 @@ const lines = normalizeLines([
 ]);
 
 describe("metrics", () => {
+  it("reconciles September sales and discounts without treating discounts as returns", () => {
+    const reconciled = normalizeLines([
+      {
+        ...base,
+        documentId: 1,
+        valoareNet: 5916626.47,
+        businessValueKind: "sale",
+      },
+      {
+        ...base,
+        documentId: 2,
+        cantitate: -1,
+        valoareNet: -528744.3,
+        tipDocument: "AIMS",
+        businessValueKind: "sale",
+      },
+      {
+        ...base,
+        documentId: 1,
+        valoareNet: -229041.31,
+        businessValueKind: "discount",
+      },
+      {
+        ...base,
+        documentId: 2,
+        valoareNet: 1306.25,
+        tipDocument: "AIMS",
+        businessValueKind: "discount",
+      },
+      {
+        ...base,
+        documentId: null,
+        cantitate: 0,
+        valoareNet: -0.1,
+        businessValueKind: "sale",
+        businessReconciliationAdjustment: true,
+      },
+      {
+        ...base,
+        documentId: null,
+        cantitate: 0,
+        valoareNet: 0.06,
+        businessValueKind: "discount",
+        businessReconciliationAdjustment: true,
+      },
+    ]);
+    const metrics = summarize(reconciled);
+    expect(metrics.net).toBeCloseTo(5160147.07, 2);
+    expect(metrics.discounts).toBeCloseTo(227735, 2);
+    expect(salesBeforeDiscounts(metrics)).toBeCloseTo(5387882.07, 2);
+    expect(metrics.documents).toBe(2);
+    expect(metrics.discountLines).toBe(2);
+    expect(metrics.returns).toBe(-528744.3);
+    expect(metrics.returnLines).toBe(1);
+    expect(metrics.quantity).toBe(1);
+    expect(
+      refineLines(reconciled, { search: "", kind: "returns", filters: {} }),
+    ).toHaveLength(1);
+  });
+
   it("sums values, counts distinct documents and tracks returns", () => {
     const totals = summarize(lines);
     expect(totals.net).toBe(550);

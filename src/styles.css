@@ -1644,8 +1644,11 @@ input[role="switch"]:disabled {
 }
 .kpi-row {
   display: grid;
-  grid-template-columns: 1.35fr repeat(4, minmax(0, 1fr));
+  grid-template-columns: 1.35fr repeat(var(--kpi-secondary-count, 4), minmax(0, 1fr));
   gap: 12px;
+}
+.kpi-row-with-discounts {
+  --kpi-secondary-count: 5;
 }
 .kpi {
   display: flex;
