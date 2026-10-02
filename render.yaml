@@ -26,4 +26,5 @@ services:
         value: strict-origin-when-cross-origin
       - path: /*
         name: X-Frame-Options
-        value: DENY
+        # MSAL's silent sign-in loads the redirect URI in a hidden same-origin iframe.
+        value: SAMEORIGIN

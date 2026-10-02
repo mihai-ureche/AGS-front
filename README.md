@@ -42,7 +42,7 @@ The backend must allow this origin in `FRONTEND_ORIGINS` (e.g. `http://localhost
 3. Add Microsoft Graph delegated permission **User.Read** (your tenant may require admin consent).
 4. Don't create a client secret or enable implicit grants.
 
-Sign-in uses MSAL's authorization code flow with PKCE, with the cache in session storage. The app acquires a Graph `User.Read` token and sends it to the backend as a bearer token. The backend validates it with Graph and loads the role, permissions and entity grants from PostgreSQL. After sign-in the app calls `POST /api/users` to create or refresh the user row, then `GET /api/me`. A `401` triggers one silent token refresh and a retry.
+Sign-in uses MSAL's authorization code flow with PKCE, with the cache in local storage so every tab shares the session. MSAL encrypts that cache with a key that lasts until the browser closes; when nothing usable is cached, the app tries a silent sign-in (`ssoSilent`) with the Microsoft session before showing the login screen. That runs in a hidden same-origin iframe, so the site must not send `X-Frame-Options: DENY`. The app acquires a Graph `User.Read` token and sends it to the backend as a bearer token. The backend validates it with Graph and loads the role, permissions and entity grants from PostgreSQL. After sign-in the app calls `POST /api/users` to create or refresh the user row, then `GET /api/me`. A `401` triggers one silent token refresh and a retry.
 
 ### First administrator
 
