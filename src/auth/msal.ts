@@ -17,7 +17,7 @@ const msal = missingConfig.length
         postLogoutRedirectUri: config.redirectUri,
         navigateToLoginRequestUrl: false,
       },
-      cache: { cacheLocation: "sessionStorage" },
+      cache: { cacheLocation: "localStorage" },
     });
 
 // Module-level so React StrictMode cannot process the redirect response twice.
@@ -25,16 +25,27 @@ const ready = msal
   ? msal
       .initialize()
       .then(() => msal.handleRedirectPromise())
-      .then((result) => {
+      .then(async (result) => {
         const account =
           result?.account ??
           msal.getActiveAccount() ??
-          msal.getAllAccounts()[0];
+          msal.getAllAccounts()[0] ??
+          (await silentSignIn(msal));
         if (account) msal.setActiveAccount(account);
         return account ?? null;
       })
   : Promise.resolve(null);
 void ready.catch(() => undefined);
+
+// MSAL's cache becomes unreadable after a browser restart, but the Microsoft
+// session usually outlives it. Fails when third-party cookies are blocked.
+async function silentSignIn(client: PublicClientApplication) {
+  try {
+    return (await client.ssoSilent({ scopes })).account;
+  } catch {
+    return null;
+  }
+}
 
 export async function restoreAccount() {
   const account = await ready;
@@ -43,7 +54,7 @@ export async function restoreAccount() {
 
 export async function signIn() {
   await ready;
-  await msal?.loginRedirect({ scopes, prompt: "select_account" });
+  await msal?.loginRedirect({ scopes });
 }
 
 export async function signOut() {

@@ -38,6 +38,9 @@ export interface SaleLine {
   cost: number | null;
   margin: number | null;
   invoice: string | null;
+  isDiscount: boolean;
+  isReconciliationAdjustment: boolean;
+  source: string | null;
 }
 
 const NONE = "—";
@@ -118,6 +121,9 @@ export function normalizeLine(
       invoiceSeries || invoiceNumber
         ? [invoiceSeries, invoiceNumber].filter(Boolean).join(" ")
         : null,
+    isDiscount: raw.businessValueKind === "discount",
+    isReconciliationAdjustment: raw.businessReconciliationAdjustment === true,
+    source: text(raw.salesSource),
   };
 }
 
@@ -128,6 +134,7 @@ export function normalizeLines(rows: Record<string, unknown>[]) {
 export const docTypeLabels: Record<string, string> = {
   BFD: "Bonuri fiscale (BFD)",
   AIM: "Avize (AIM)",
+  AIMS: "Stornări avize (AIMS)",
 };
 
 export function documentLabel(line: SaleLine) {
@@ -298,6 +305,8 @@ export interface Metrics {
   lines: number;
   returns: number;
   returnLines: number;
+  discounts: number;
+  discountLines: number;
 }
 
 class Accumulator {
@@ -310,26 +319,34 @@ class Accumulator {
   lines = 0;
   returns = 0;
   returnLines = 0;
+  discounts = 0;
+  discountLines = 0;
   private documents = new Set<string>();
 
   add(line: SaleLine) {
     this.net += line.net;
     this.vat += line.vat;
     this.gross += line.gross;
-    this.quantity += line.quantity;
+    if (!line.isDiscount && !line.isReconciliationAdjustment)
+      this.quantity += line.quantity;
     this.lines += 1;
     if (line.margin !== null) {
       this.margin += line.margin;
       this.marginBase += line.net;
     }
-    if (line.net < 0 || line.quantity < 0) {
+    if (line.isDiscount) {
+      this.discounts -= line.net;
+      if (!line.isReconciliationAdjustment) this.discountLines += 1;
+    }
+    if (isReturn(line)) {
       this.returns += line.net;
       this.returnLines += 1;
     }
-    this.documents.add(
-      line.documentId ??
-        `${line.docType}:${line.series}:${line.number}:${line.id}`,
-    );
+    if (!line.isReconciliationAdjustment)
+      this.documents.add(
+        line.documentId ??
+          `${line.docType}:${line.series}:${line.number}:${line.id}`,
+      );
   }
 
   result(): Metrics {
@@ -343,6 +360,8 @@ class Accumulator {
       lines,
       returns,
       returnLines,
+      discounts,
+      discountLines,
     } = this;
     return {
       net,
@@ -354,6 +373,8 @@ class Accumulator {
       lines,
       returns,
       returnLines,
+      discounts,
+      discountLines,
       documents: this.documents.size,
     };
   }
@@ -369,6 +390,12 @@ export const marginPct = (metrics: Metrics) =>
   metrics.marginBase ? (metrics.margin / metrics.marginBase) * 100 : null;
 export const averageDocument = (metrics: Metrics) =>
   metrics.documents ? metrics.net / metrics.documents : 0;
+export const salesBeforeDiscounts = (metrics: Metrics) =>
+  metrics.net + metrics.discounts;
+export const isReturn = (line: SaleLine) =>
+  !line.isDiscount &&
+  !line.isReconciliationAdjustment &&
+  (line.net < 0 || line.quantity < 0);
 /** Share of net sales whose cost is known, 0–100. */
 export const costCoverage = (metrics: Metrics) =>
   metrics.net ? (metrics.marginBase / metrics.net) * 100 : 100;
@@ -538,9 +565,9 @@ export function refineLines(
       [dimensions[dimension].key, new Set(values)] as const,
   );
   return lines.filter((line) => {
-    const isReturn = line.net < 0 || line.quantity < 0;
-    if (kind === "sales" && isReturn) return false;
-    if (kind === "returns" && !isReturn) return false;
+    const returned = isReturn(line);
+    if (kind === "sales" && returned) return false;
+    if (kind === "returns" && !returned) return false;
     if (!sets.every(([key, values]) => values.has(key(line)))) return false;
     if (!terms.length) return true;
     const haystack = [

@@ -7,7 +7,12 @@ import {
   plural,
   signedPercent,
 } from "../../lib/format";
-import { averageDocument, costCoverage, marginPct } from "../../lib/sales";
+import {
+  averageDocument,
+  costCoverage,
+  marginPct,
+  salesBeforeDiscounts,
+} from "../../lib/sales";
 import type { Metrics } from "../../lib/sales";
 
 type Tile = {
@@ -70,8 +75,18 @@ export function Kpis({
       upIsGood: false,
     },
   ];
+  if (current.discountLines || previous?.discountLines) {
+    tiles.splice(1, 0, {
+      label: "Discounturi",
+      value: money(current.discounts),
+      detail: `${money(salesBeforeDiscounts(current))} înainte de discounturi`,
+      current: current.discounts,
+      previous: previous?.discounts,
+      upIsGood: false,
+    });
+  }
   return (
-    <div className="kpi-row">
+    <div className={`kpi-row ${tiles.length > 5 ? "kpi-row-with-discounts" : ""}`}>
       {tiles.map((tile) => (
         <article
           key={tile.label}

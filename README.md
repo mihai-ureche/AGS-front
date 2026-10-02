@@ -42,7 +42,7 @@ The backend must allow this origin in `FRONTEND_ORIGINS` (e.g. `http://localhost
 3. Add Microsoft Graph delegated permission **User.Read** (your tenant may require admin consent).
 4. Don't create a client secret or enable implicit grants.
 
-Sign-in uses MSAL's authorization code flow with PKCE, with the cache in session storage. The app acquires a Graph `User.Read` token and sends it to the backend as a bearer token. The backend validates it with Graph and loads the role, permissions and entity grants from PostgreSQL. After sign-in the app calls `POST /api/users` to create or refresh the user row, then `GET /api/me`. A `401` triggers one silent token refresh and a retry.
+Sign-in uses MSAL's authorization code flow with PKCE, with the cache in local storage so every tab shares the session. MSAL encrypts that cache with a key that lasts until the browser closes; when nothing usable is cached, the app tries a silent sign-in (`ssoSilent`) with the Microsoft session before showing the login screen. That runs in a hidden same-origin iframe, so the site must not send `X-Frame-Options: DENY`. The app acquires a Graph `User.Read` token and sends it to the backend as a bearer token. The backend validates it with Graph and loads the role, permissions and entity grants from PostgreSQL. After sign-in the app calls `POST /api/users` to create or refresh the user row, then `GET /api/me`. A `401` triggers one silent token refresh and a retry.
 
 ### First administrator
 
@@ -65,6 +65,18 @@ The query bar at the top loads data from `GET /api/borg/sales`. The refine bar b
 - **Breakdown:** group by any dimension (including day, week, month, weekday, hour), optionally "then by" a second one. Rows expand, columns sort, and the result exports to CSV. The line table exports every refined line with all fields.
 
 Metric definitions: **documents** counts distinct `documentId`. **Margin %** is margin ÷ net, computed only over lines where Borg supplies a margin or cost; the KPI shows how much of net sales that covers. **Returns** are lines with a negative value or quantity.
+
+**Reconciled business reports:** the backend can supply private, authoritative
+Piese reports for a closed month. The dashboard labels this source and uses its
+lines consistently in KPIs, charts, tables and CSV exports. A **Discounturi** tile
+shows commercial discounts and the sales amount before them; discounts and
+business rounding adjustments are excluded from returned-goods counts. Net sales
+include signed `AIMS` reversals. For September 2026 the business markers are
+5,387,882.07 lei before discounts, 227,735.00 lei discounts and 5,160,147.07 lei net.
+The backend import keeps the CSV's −0.10 lei sales and +0.06 lei discount differences
+as explicit reconciliation entries. This requires the updated AGS-backend and its
+private report file; no business report data belongs in frontend assets. Warehouse
+queries and requests including internal transfers continue using live Borg data.
 
 **Currency:** Borg returns lei. The **Lei / Euro** switch at the top right shows every amount, chart and CSV export in euro at an editable rate (default 5,10 lei per euro, `DEFAULT_EUR_RATE` in `src/lib/currency.ts`). Lei exports keep Borg's exact values; euro exports are rounded to cents.
 
