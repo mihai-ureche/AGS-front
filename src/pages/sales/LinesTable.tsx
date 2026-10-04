@@ -1,20 +1,47 @@
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Download } from "lucide-react";
+import { Badge } from "../../components/ui";
 import { downloadCsv } from "../../lib/csv";
 import { useCurrency } from "../../lib/currency";
 import { number, plural, shortDate } from "../../lib/format";
-import { documentLabel, isReturn } from "../../lib/sales";
+import {
+  documentLabel,
+  isReturn,
+  lineLabel,
+  signedReversals,
+  summarize,
+} from "../../lib/sales";
 import type { SaleLine } from "../../lib/sales";
 
 type SortKey = "date" | "net" | "quantity" | "margin" | "product";
 const PAGE_SIZE = 25;
 
+function KindBadge({ line }: { line: SaleLine }) {
+  const tone =
+    line.kind === "discount"
+      ? line.net < 0 && !line.discountInLines
+        ? "discount"
+        : line.net > 0
+          ? "accent"
+          : "neutral"
+      : line.kind === "unclassified"
+        ? "warning"
+        : "neutral";
+  return <Badge tone={tone}>{lineLabel(line)}</Badge>;
+}
+
+const yesNo = (value: boolean | null) =>
+  value === null ? null : value ? "da" : "nu";
+
 export function LinesTable({
   lines,
   filename,
+  discounts = false,
 }: {
   lines: SaleLine[];
   filename: string;
+  /** Every line is a discount: show the discount columns. */
+  discounts?: boolean;
 }) {
   const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" }>(
     { key: "date", direction: "desc" },
@@ -127,9 +154,12 @@ export function LinesTable({
         `Cost (${currency})`,
         `Marjă (${currency})`,
         "Factură",
-        "Sursă",
-        "Discount comercial",
-        "Ajustare reconciliere business",
+        "Tip linie",
+        "Tip valoare AGS",
+        "Discount inclus în linii",
+        "ID mișcare",
+        "ID mișcare sursă",
+        "Alocare discount",
       ],
       ...sorted.map((line) => [
         line.date,
@@ -162,21 +192,34 @@ export function LinesTable({
         amount(line.cost),
         amount(line.margin),
         line.invoice,
-        line.source ?? "borg",
-        line.isDiscount ? "da" : "nu",
-        line.isReconciliationAdjustment ? "da" : "nu",
+        lineLabel(line),
+        line.kind,
+        yesNo(line.discountInLines),
+        line.movementId,
+        line.sourceMovementId,
+        line.allocation,
       ]),
     ]);
   }
 
+  const discountTotals = useMemo(
+    () => (discounts ? summarize(lines) : null),
+    [discounts, lines],
+  );
+
   return (
-    <section className="panel" aria-labelledby="lines-title">
+    <section className="panel" id="sales-lines" aria-labelledby="lines-title">
       <div className="panel-heading">
         <div>
-          <h2 id="lines-title">Linii de produs</h2>
+          <h2 id="lines-title">
+            {discounts ? "Linii de discount" : "Linii de vânzare"}
+          </h2>
           <p>
             {plural(lines.length, "linie corespunde", "linii corespund")}{" "}
-            filtrelor curente.
+            filtrelor curente
+            {discountTotals
+              ? `. Acordate ${money(discountTotals.discountsGranted)} · stornate ${money(signedReversals(discountTotals))} · discount net ${money(discountTotals.discounts)}, fără TVA.`
+              : "."}
           </p>
         </div>
         <div className="panel-controls">
@@ -190,73 +233,133 @@ export function LinesTable({
         </div>
       </div>
       <div className="table-scroll">
-        <table className="data-table lines-table">
-          <thead>
-            <tr>
-              {header("date", "Data")}
-              <th>Document</th>
-              <th>Gestiune</th>
-              <th>Client</th>
-              {header("product", "Produs")}
-              {header("quantity", "Cant.", true)}
-              {header("net", "Net", true)}
-              <th className="num">Brut</th>
-              {header("margin", "Marjă", true)}
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((line) => (
-              <tr key={line.id} className={isReturn(line) ? "is-return" : ""}>
-                <td className="nowrap">
-                  {shortDate(line.date)}
-                  {line.hour !== null && (
-                    <small className="muted">
-                      {" "}
-                      {String(line.hour).padStart(2, "0")}h
-                    </small>
-                  )}
-                </td>
-                <td className="nowrap">
-                  {documentLabel(line)}
-                  {line.invoice && (
-                    <small className="muted block">
-                      Factura {line.invoice}
-                    </small>
-                  )}
-                </td>
-                <td>{line.warehouse}</td>
-                <td title={line.client}>
-                  <span className="truncate">{line.client}</span>
-                </td>
-                <td className="product-cell" title={line.product}>
-                  <span className="truncate">{line.product}</span>
-                  <small className="muted">
-                    {[
-                      line.productCode,
-                      line.category,
-                      line.revenueGroupId ? line.revenueGroup : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </small>
-                </td>
-                <td className="num nowrap">
-                  {number(line.quantity)}{" "}
-                  <small className="muted">{line.unit}</small>
-                </td>
-                <td className={`num ${line.net < 0 ? "negative" : ""}`}>
-                  {money(line.net)}
-                </td>
-                <td className="num muted">{money(line.gross)}</td>
-                <td
-                  className={`num ${(line.margin ?? 0) < 0 ? "negative" : ""}`}
-                >
-                  {line.margin === null ? "—" : money(line.margin)}
-                </td>
+        {discounts ? (
+          <table className="data-table lines-table">
+            <thead>
+              <tr>
+                {header("date", "Data")}
+                <th>Document</th>
+                <th>Client</th>
+                <th>Gestiune</th>
+                <th>Tip venit</th>
+                {header("product", "Descriere")}
+                <th>Tip</th>
+                {header("net", "Valoare netă", true)}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {visible.map((line) => (
+                <tr key={line.id}>
+                  <td className="nowrap">{shortDate(line.date)}</td>
+                  <td className="nowrap">
+                    {documentLabel(line)}
+                    {line.invoice && (
+                      <small className="muted block">
+                        Factura {line.invoice}
+                      </small>
+                    )}
+                  </td>
+                  <td title={line.client}>
+                    <span className="truncate">{line.client}</span>
+                  </td>
+                  <td>{line.warehouse}</td>
+                  <td>{line.revenueGroupId ? line.revenueGroup : "—"}</td>
+                  <td className="product-cell" title={line.product}>
+                    <span className="truncate">{line.product}</span>
+                    {line.sourceMovementId && (
+                      <small className="muted">
+                        Cotă alocată din mișcarea {line.sourceMovementId}
+                        {line.allocation ? ` · ${line.allocation}` : ""}
+                      </small>
+                    )}
+                  </td>
+                  <td>
+                    <KindBadge line={line} />
+                  </td>
+                  <td className={`num ${line.net < 0 ? "negative" : ""}`}>
+                    {money(line.net)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <table className="data-table lines-table">
+            <thead>
+              <tr>
+                {header("date", "Data")}
+                <th>Document</th>
+                <th>Gestiune</th>
+                <th>Client</th>
+                {header("product", "Produs")}
+                {header("quantity", "Cant.", true)}
+                {header("net", "Net", true)}
+                <th className="num">Brut</th>
+                {header("margin", "Marjă", true)}
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((line) => (
+                <tr key={line.id} className={isReturn(line) ? "is-return" : ""}>
+                  <td className="nowrap">
+                    {shortDate(line.date)}
+                    {line.hour !== null && (
+                      <small className="muted">
+                        {" "}
+                        {String(line.hour).padStart(2, "0")}h
+                      </small>
+                    )}
+                  </td>
+                  <td className="nowrap">
+                    {documentLabel(line)}
+                    {line.invoice && (
+                      <small className="muted block">
+                        Factura {line.invoice}
+                      </small>
+                    )}
+                  </td>
+                  <td>{line.warehouse}</td>
+                  <td title={line.client}>
+                    <span className="truncate">{line.client}</span>
+                  </td>
+                  <td className="product-cell" title={line.product}>
+                    <span className="truncate">
+                      {line.product}
+                      {line.kind !== "sale" && (
+                        <>
+                          {" "}
+                          <KindBadge line={line} />
+                        </>
+                      )}
+                    </span>
+                    <small className="muted">
+                      {[
+                        line.productCode,
+                        line.category,
+                        line.revenueGroupId ? line.revenueGroup : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </small>
+                  </td>
+                  <td className="num nowrap">
+                    {number(line.quantity)}{" "}
+                    <small className="muted">{line.unit}</small>
+                  </td>
+                  <td className={`num ${line.net < 0 ? "negative" : ""}`}>
+                    {money(line.net)}
+                  </td>
+                  <td className="num muted">{money(line.gross)}</td>
+                  <td
+                    className={`num ${(line.margin ?? 0) < 0 ? "negative" : ""}`}
+                  >
+                    {line.margin === null ? "—" : money(line.margin)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
       {pages > 1 && (
         <div className="table-footer">

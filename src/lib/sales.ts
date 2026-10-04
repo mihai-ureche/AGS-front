@@ -1,10 +1,13 @@
+import type { BusinessValueKind } from "../api/types";
 import { eachDay, parseIso, weekStart } from "./dates";
 import type { DateRange } from "./dates";
 import { capitalize, locale } from "./format";
 
-/** A Borg product line (`/api2/borg/sales`), normalized from its camelCase JSON. */
+/** A Borg sales row (`/api/borg/sales`), normalized from its camelCase JSON. */
 export interface SaleLine {
   id: string;
+  /** Borg's `miscareId`; allocated discount shares each have their own. */
+  movementId: string | null;
   documentId: string | null;
   docType: string;
   channel: string;
@@ -38,9 +41,17 @@ export interface SaleLine {
   cost: number | null;
   margin: number | null;
   invoice: string | null;
-  isDiscount: boolean;
-  isReconciliationAdjustment: boolean;
-  source: string | null;
+  /** AGS's classification; missing or unknown values are "unclassified". */
+  kind: BusinessValueKind;
+  /**
+   * The discount is already in the product lines' net and this row carries 0.
+   * Null when Borg does not report the flag.
+   */
+  discountInLines: boolean | null;
+  /** The Borg movement an allocated discount share was split from. */
+  sourceMovementId: string | null;
+  /** AGS's allocation details for a discount share, as readable text. */
+  allocation: string | null;
 }
 
 const NONE = "—";
@@ -58,6 +69,23 @@ function num(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+const businessValueKinds: readonly BusinessValueKind[] = [
+  "sale",
+  "discount",
+  "special",
+  "unclassified",
+];
+
+/** Flattens an allocation object to "key: value; …" so it reads in tables and CSV. */
+function allocationText(value: unknown): string | null {
+  if (typeof value !== "object" || value === null) return text(value);
+  const parts = Object.entries(value).flatMap(([key, item]) => {
+    const shown = typeof item === "boolean" ? String(item) : text(item);
+    return shown ? [`${key}: ${shown}`] : [];
+  });
+  return parts.length ? parts.join("; ") : JSON.stringify(value);
 }
 
 function hourOf(value: unknown): number | null {
@@ -84,8 +112,10 @@ export function normalizeLine(
   const margin = num(raw.marja) ?? (cost === null ? null : net - cost);
   const invoiceSeries = text(raw.facturaSerie);
   const invoiceNumber = text(raw.facturaNumar);
+  const movementId = text(raw.miscareId);
   return {
-    id: text(raw.miscareId) ?? `line-${index}`,
+    id: movementId ?? `line-${index}`,
+    movementId,
     documentId: text(raw.documentId),
     docType: text(raw.tipDocument) ?? NONE,
     channel: text(raw.canal) ?? NONE,
@@ -121,9 +151,15 @@ export function normalizeLine(
       invoiceSeries || invoiceNumber
         ? [invoiceSeries, invoiceNumber].filter(Boolean).join(" ")
         : null,
-    isDiscount: raw.businessValueKind === "discount",
-    isReconciliationAdjustment: raw.businessReconciliationAdjustment === true,
-    source: text(raw.salesSource),
+    kind:
+      businessValueKinds.find((kind) => kind === raw.businessValueKind) ??
+      "unclassified",
+    discountInLines:
+      typeof raw.discountInclusInLinii === "boolean"
+        ? raw.discountInclusInLinii
+        : null,
+    sourceMovementId: text(raw.sourceMiscareId),
+    allocation: allocationText(raw.discountAllocation),
   };
 }
 
@@ -293,7 +329,13 @@ function nameFor(dimension: Dimension, line: SaleLine) {
 // ---------------------------------------------------------------------------
 // Metrics
 
+/**
+ * Totals of authoritative Borg amounts, in lei. Product net values already
+ * include their line discounts; `discounts` covers only separate commercial
+ * discount rows.
+ */
 export interface Metrics {
+  /** Every row's net: products, separate discounts, services, unclassified. */
   net: number;
   vat: number;
   gross: number;
@@ -303,79 +345,115 @@ export interface Metrics {
   marginBase: number;
   documents: number;
   lines: number;
+  /** Product rows (S); returns are negative and reduce it. */
+  productSales: number;
+  /** Product returns, negative; already part of `productSales`. */
   returns: number;
   returnLines: number;
+  /** Separate discounts as a positive reduction (D = −Σ discount net). */
   discounts: number;
-  discountLines: number;
+  /** Discount rows with a negative net, as a positive amount. */
+  discountsGranted: number;
+  /** Discount reversals (positive net), as a positive amount; they reduce D. */
+  discountsReversed: number;
+  /** Separate discount transactions; allocated shares of one count once. */
+  discountTransactions: number;
+  /** Services and other special lines, kept out of product sales. */
+  special: number;
+  specialLines: number;
+  unclassified: number;
+  unclassifiedLines: number;
 }
 
+/** Rounds lei to whole cents, symmetrically, so returns mirror sales. */
+export const toCents = (lei: number) =>
+  Math.sign(lei) * Math.round(Math.abs(lei) * 100);
+
+const moneyKeys = [
+  "net",
+  "vat",
+  "gross",
+  "margin",
+  "marginBase",
+  "productSales",
+  "returns",
+  "discountsGranted",
+  "discountsReversed",
+  "special",
+  "unclassified",
+] as const;
+type MoneyKey = (typeof moneyKeys)[number];
+
 class Accumulator {
-  net = 0;
-  vat = 0;
-  gross = 0;
+  /** Money adds up in integer cents so long periods don't drift. */
+  private cents = Object.fromEntries(
+    moneyKeys.map((key) => [key, 0]),
+  ) as Record<MoneyKey, number>;
   quantity = 0;
-  margin = 0;
-  marginBase = 0;
   lines = 0;
-  returns = 0;
   returnLines = 0;
-  discounts = 0;
-  discountLines = 0;
+  specialLines = 0;
+  unclassifiedLines = 0;
   private documents = new Set<string>();
+  private discountSources = new Set<string>();
 
   add(line: SaleLine) {
-    this.net += line.net;
-    this.vat += line.vat;
-    this.gross += line.gross;
-    if (!line.isDiscount && !line.isReconciliationAdjustment)
-      this.quantity += line.quantity;
-    this.lines += 1;
+    const cents = this.cents;
+    const net = toCents(line.net);
+    cents.net += net;
+    cents.vat += toCents(line.vat);
+    cents.gross += toCents(line.gross);
     if (line.margin !== null) {
-      this.margin += line.margin;
-      this.marginBase += line.net;
+      cents.margin += toCents(line.margin);
+      cents.marginBase += net;
     }
-    if (line.isDiscount) {
-      this.discounts -= line.net;
-      if (!line.isReconciliationAdjustment) this.discountLines += 1;
+    if (line.kind !== "discount") this.quantity += line.quantity;
+    this.lines += 1;
+    switch (line.kind) {
+      case "sale":
+        cents.productSales += net;
+        if (isReturn(line)) {
+          cents.returns += net;
+          this.returnLines += 1;
+        }
+        break;
+      case "discount":
+        if (net < 0) cents.discountsGranted -= net;
+        else cents.discountsReversed += net;
+        // Discounts already inside product prices carry 0 and aren't transactions.
+        if (line.discountInLines !== true)
+          this.discountSources.add(line.sourceMovementId ?? line.id);
+        break;
+      case "special":
+        cents.special += net;
+        this.specialLines += 1;
+        break;
+      case "unclassified":
+        cents.unclassified += net;
+        this.unclassifiedLines += 1;
+        break;
     }
-    if (isReturn(line)) {
-      this.returns += line.net;
-      this.returnLines += 1;
-    }
-    if (!line.isReconciliationAdjustment)
-      this.documents.add(
-        line.documentId ??
-          `${line.docType}:${line.series}:${line.number}:${line.id}`,
-      );
+    this.documents.add(
+      line.documentId ??
+        `${line.docType}:${line.series}:${line.number}:${line.id}`,
+    );
   }
 
   result(): Metrics {
-    const {
-      net,
-      vat,
-      gross,
-      quantity,
-      margin,
-      marginBase,
-      lines,
-      returns,
-      returnLines,
-      discounts,
-      discountLines,
-    } = this;
+    const { cents } = this;
+    const lei = Object.fromEntries(
+      moneyKeys.map((key) => [key, cents[key] / 100]),
+    ) as Record<MoneyKey, number>;
     return {
-      net,
-      vat,
-      gross,
-      quantity,
-      margin,
-      marginBase,
-      lines,
-      returns,
-      returnLines,
-      discounts,
-      discountLines,
+      ...lei,
+      discounts: (cents.discountsGranted - cents.discountsReversed) / 100,
+      quantity: this.quantity,
+      lines: this.lines,
+      returnLines: this.returnLines,
+      specialLines: this.specialLines,
+      unclassifiedLines: this.unclassifiedLines,
       documents: this.documents.size,
+      discountTransactions: this.discountSources.size,
     };
   }
 }
@@ -390,23 +468,58 @@ export const marginPct = (metrics: Metrics) =>
   metrics.marginBase ? (metrics.margin / metrics.marginBase) * 100 : null;
 export const averageDocument = (metrics: Metrics) =>
   metrics.documents ? metrics.net / metrics.documents : 0;
-export const salesBeforeDiscounts = (metrics: Metrics) =>
-  metrics.net + metrics.discounts;
+/** Product sales after separate discounts: S − D. */
+export const salesAfterDiscounts = (metrics: Metrics) =>
+  (toCents(metrics.productSales) - toCents(metrics.discounts)) / 100;
+/** D / S × 100; null without positive product sales. */
+export const discountPct = (metrics: Metrics) =>
+  metrics.productSales > 0
+    ? (metrics.discounts / metrics.productSales) * 100
+    : null;
+/** Reversals as they reduce D: negative, and never "−0,00" when there are none. */
+export const signedReversals = (metrics: Metrics) =>
+  metrics.discountsReversed ? -metrics.discountsReversed : 0;
 export const isReturn = (line: SaleLine) =>
-  !line.isDiscount &&
-  !line.isReconciliationAdjustment &&
-  (line.net < 0 || line.quantity < 0);
+  line.kind === "sale" && (line.net < 0 || line.quantity < 0);
 /** Share of net sales whose cost is known, 0–100. */
 export const costCoverage = (metrics: Metrics) =>
   metrics.net ? (metrics.marginBase / metrics.net) * 100 : 100;
 
-export type MetricKey = "net" | "gross" | "margin" | "quantity" | "documents";
+/** How a line reads in tables and exports. */
+export function lineLabel(line: SaleLine) {
+  switch (line.kind) {
+    case "sale":
+      return isReturn(line) ? "Retur produs" : "Vânzare produs";
+    case "discount":
+      if (line.discountInLines) return "Discount inclus în preț";
+      return line.net < 0
+        ? "Discount acordat"
+        : line.net > 0
+          ? "Discount stornat"
+          : "Discount fără valoare";
+    case "special":
+      return "Serviciu / special";
+    case "unclassified":
+      return "Neclasificat";
+  }
+}
+
+export type MetricKey =
+  | "net"
+  | "productSales"
+  | "discounts"
+  | "gross"
+  | "margin"
+  | "quantity"
+  | "documents";
 export const metricOptions: {
   key: MetricKey;
   label: string;
   money: boolean;
 }[] = [
   { key: "net", label: "Vânzări nete", money: true },
+  { key: "productSales", label: "Vânzări produse", money: true },
+  { key: "discounts", label: "Discounturi", money: true },
   { key: "gross", label: "Vânzări brute (cu TVA)", money: true },
   { key: "margin", label: "Marjă brută", money: true },
   { key: "quantity", label: "Cantitate", money: false },
@@ -544,7 +657,34 @@ export function composition(
 // ---------------------------------------------------------------------------
 // Refinement (client-side filters on loaded lines)
 
-export type LineKind = "all" | "sales" | "returns";
+export type LineKind =
+  "all" | "sales" | "returns" | "discounts" | "special" | "unclassified";
+export const lineKindOptions: { value: LineKind; label: string }[] = [
+  { value: "all", label: "Toate liniile" },
+  { value: "sales", label: "Vânzări" },
+  { value: "returns", label: "Retururi" },
+  { value: "discounts", label: "Discounturi" },
+  { value: "special", label: "Servicii / speciale" },
+  { value: "unclassified", label: "Neclasificate" },
+];
+
+export function matchesKind(line: SaleLine, kind: LineKind) {
+  switch (kind) {
+    case "all":
+      return true;
+    case "sales":
+      return line.kind === "sale" && !isReturn(line);
+    case "returns":
+      return isReturn(line);
+    case "discounts":
+      return line.kind === "discount";
+    case "special":
+      return line.kind === "special";
+    case "unclassified":
+      return line.kind === "unclassified";
+  }
+}
+
 export interface Refine {
   search: string;
   kind: LineKind;
@@ -565,9 +705,7 @@ export function refineLines(
       [dimensions[dimension].key, new Set(values)] as const,
   );
   return lines.filter((line) => {
-    const returned = isReturn(line);
-    if (kind === "sales" && returned) return false;
-    if (kind === "returns" && !returned) return false;
+    if (!matchesKind(line, kind)) return false;
     if (!sets.every(([key, values]) => values.has(key(line)))) return false;
     if (!terms.length) return true;
     const haystack = [

@@ -1,4 +1,12 @@
-import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
+import type { ReactNode } from "react";
+import {
+  ArrowDownRight,
+  ArrowRight,
+  ArrowUpRight,
+  BadgePercent,
+  Minus,
+} from "lucide-react";
+import { Badge } from "../../components/ui";
 import { useCurrency } from "../../lib/currency";
 import {
   change,
@@ -10,60 +18,108 @@ import {
 import {
   averageDocument,
   costCoverage,
+  discountPct,
   marginPct,
-  salesBeforeDiscounts,
+  salesAfterDiscounts,
+  signedReversals,
 } from "../../lib/sales";
 import type { Metrics } from "../../lib/sales";
 
 type Tile = {
   label: string;
   value: string;
-  detail?: string;
+  detail?: ReactNode;
   current: number;
   previous?: number;
   /** Whether a rising value is good news. */
   upIsGood?: boolean;
-  hero?: boolean;
+  tone?: "warning";
 };
 
 export function Kpis({
   current,
   previous,
+  incomplete = false,
+  previousIncomplete = false,
+  discountsShown = false,
+  onShowDiscounts,
 }: {
   current: Metrics;
   previous?: Metrics;
+  /** Borg truncated the current period: totals are partial. */
+  incomplete?: boolean;
+  previousIncomplete?: boolean;
+  /** The discount lines filter is on. */
+  discountsShown?: boolean;
+  onShowDiscounts: () => void;
 }) {
   const { money } = useCurrency();
+  // A partial period can't be compared as if it were complete.
+  const before = incomplete || previousIncomplete ? undefined : previous;
+  const comparison = (value: (metrics: Metrics) => number, upIsGood = true) =>
+    before ? (
+      <Delta
+        current={value(current)}
+        previous={value(before)}
+        upIsGood={upIsGood}
+      />
+    ) : (
+      previous && (
+        <span className="delta">Comparație indisponibilă: date incomplete</span>
+      )
+    );
+  const partial = incomplete && (
+    <Badge tone="warning">
+      <span title="Borg a limitat rezultatele; totalul nu acoperă întreaga perioadă">
+        Parțial
+      </span>
+    </Badge>
+  );
+  const pct = discountPct(current);
   const coverage = costCoverage(current);
-  const tiles: Tile[] = [
-    {
-      label: "Vânzări nete",
-      value: money(current.net),
-      detail: `${money(current.gross)} cu TVA`,
-      current: current.net,
-      previous: previous?.net,
-      hero: true,
-    },
+  const hasOther = current.specialLines > 0 || current.unclassifiedLines > 0;
+
+  const tiles: Tile[] = [];
+  if (current.specialLines || previous?.specialLines) {
+    tiles.push({
+      label: "Servicii / speciale",
+      value: money(current.special),
+      detail: `${plural(current.specialLines, "linie", "linii")} · separat de vânzările de produse`,
+      current: current.special,
+      previous: before?.special,
+    });
+  }
+  if (current.unclassifiedLines || previous?.unclassifiedLines) {
+    tiles.push({
+      label: "Neclasificate",
+      value: money(current.unclassified),
+      detail: `${plural(current.unclassifiedLines, "linie", "linii")} fără tip de valoare cunoscut`,
+      current: current.unclassified,
+      previous: before?.unclassified,
+      tone: "warning",
+    });
+  }
+  tiles.push(
     {
       label: "Marjă brută",
       value: money(current.margin),
       detail: `${percent(marginPct(current))} din net${coverage < 99.5 ? ` · cost cunoscut pentru ${percent(coverage, 0)} din vânzări` : ""}`,
       current: current.margin,
-      previous: previous?.margin,
+      previous: before?.margin,
     },
     {
       label: "Documente",
       value: number(current.documents),
-      detail: plural(current.lines, "linie de produs", "linii de produs"),
+      detail: plural(current.lines, "linie", "linii"),
       current: current.documents,
-      previous: previous?.documents,
+      previous: before?.documents,
     },
     {
       label: "Valoare medie document",
       value: money(averageDocument(current)),
-      detail: "Vânzări nete per bon sau aviz",
+      detail: "Valoare netă per bon sau aviz",
       current: averageDocument(current),
-      previous: previous ? averageDocument(previous) : undefined,
+      previous: before ? averageDocument(before) : undefined,
     },
     {
       label: "Retururi",
@@ -71,39 +127,102 @@ export function Kpis({
       detail: plural(current.returnLines, "linie de retur", "linii de retur"),
       // Compare magnitudes: more returned value is worse.
       current: Math.abs(current.returns),
-      previous: previous ? Math.abs(previous.returns) : undefined,
+      previous: before ? Math.abs(before.returns) : undefined,
       upIsGood: false,
     },
-  ];
-  if (current.discountLines || previous?.discountLines) {
-    tiles.splice(1, 0, {
-      label: "Discounturi",
-      value: money(current.discounts),
-      detail: `${money(salesBeforeDiscounts(current))} înainte de discounturi`,
-      current: current.discounts,
-      previous: previous?.discounts,
-      upIsGood: false,
-    });
-  }
+  );
+
   return (
-    <div className={`kpi-row ${tiles.length > 5 ? "kpi-row-with-discounts" : ""}`}>
-      {tiles.map((tile) => (
-        <article
-          key={tile.label}
-          className={`kpi ${tile.hero ? "kpi-hero" : ""}`}
-        >
-          <span className="kpi-label">{tile.label}</span>
-          <strong className="kpi-value">{tile.value}</strong>
-          {tile.previous !== undefined && (
-            <Delta
-              current={tile.current}
-              previous={tile.previous}
-              upIsGood={tile.upIsGood ?? true}
-            />
-          )}
-          {tile.detail && <span className="kpi-detail">{tile.detail}</span>}
+    <div className="kpis">
+      <div
+        className="kpi-lead-row"
+        role="group"
+        aria-label="Vânzări de produse și discounturi"
+      >
+        <article className="kpi kpi-lead kpi-sales">
+          <span className="kpi-label">Vânzări produse {partial}</span>
+          <strong className="kpi-value">{money(current.productSales)}</strong>
+          {comparison((metrics) => metrics.productSales)}
+          <span className="kpi-detail">
+            Net, fără TVA · include retururile de {money(current.returns)}
+          </span>
         </article>
-      ))}
+
+        <article
+          className={`kpi kpi-lead kpi-discount ${discountsShown ? "is-active" : ""}`}
+        >
+          <span className="kpi-label">
+            <BadgePercent size={16} aria-hidden="true" /> Discounturi {partial}
+          </span>
+          <strong className="kpi-value">{money(current.discounts)}</strong>
+          <span className="kpi-share">
+            {pct === null
+              ? "Procent indisponibil fără vânzări de produse"
+              : `${percent(pct)} din vânzările de produse`}
+          </span>
+          {comparison((metrics) => metrics.discounts, false)}
+          <dl className="kpi-split">
+            <div>
+              <dt>Acordate</dt>
+              <dd>{money(current.discountsGranted)}</dd>
+            </div>
+            <div>
+              <dt>Stornate</dt>
+              <dd>{money(signedReversals(current))}</dd>
+            </div>
+          </dl>
+          <span className="kpi-detail">
+            Net, fără TVA ·{" "}
+            {plural(current.discountTransactions, "tranzacție", "tranzacții")}.
+            Discounturi comerciale separate. Reducerile incluse în prețul
+            produselor nu se scad din nou.
+          </span>
+          <button
+            type="button"
+            className="kpi-action"
+            aria-pressed={discountsShown}
+            onClick={onShowDiscounts}
+          >
+            {discountsShown
+              ? "Afișați toate liniile"
+              : "Vedeți liniile de discount"}
+            <ArrowRight size={14} aria-hidden="true" />
+          </button>
+        </article>
+
+        <article className="kpi kpi-lead kpi-after">
+          <span className="kpi-label">Vânzări după discounturi {partial}</span>
+          <strong className="kpi-value">
+            {money(salesAfterDiscounts(current))}
+          </strong>
+          {comparison(salesAfterDiscounts)}
+          <span className="kpi-detail">
+            Vânzări produse − discounturi, fără TVA
+            {hasOther &&
+              ` · cu servicii și neclasificate, valoarea netă este ${money(current.net)}`}
+          </span>
+        </article>
+      </div>
+
+      <div className="kpi-row">
+        {tiles.map((tile) => (
+          <article
+            key={tile.label}
+            className={`kpi ${tile.tone === "warning" ? "kpi-warning" : ""}`}
+          >
+            <span className="kpi-label">{tile.label}</span>
+            <strong className="kpi-value">{tile.value}</strong>
+            {tile.previous !== undefined && (
+              <Delta
+                current={tile.current}
+                previous={tile.previous}
+                upIsGood={tile.upIsGood ?? true}
+              />
+            )}
+            {tile.detail && <span className="kpi-detail">{tile.detail}</span>}
+          </article>
+        ))}
+      </div>
     </div>
   );
 }

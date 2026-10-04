@@ -56,27 +56,39 @@ Every new user starts with the `user` role and no entity grants. To bootstrap:
 
 The query bar at the top loads data from `GET /api/borg/sales`. The refine bar below it filters the loaded lines in the browser.
 
-- **Query:** entity (only granted ones), date range (presets or custom, up to 366 days), document type (BFD receipts / AIM delivery notes), warehouse ID (`gestiune`), include transfers, and compare with the previous period of equal length. These settings live in the URL hash, so views can be bookmarked and shared.
+- **Query:** entity (only granted ones), date range (presets or custom, up to 366 days), document type (BFD receipts / AIM delivery notes / AIMS delivery-note reversals), warehouse ID (`gestiune`), include transfers, and compare with the previous period of equal length. These settings live in the URL hash, so views can be bookmarked and shared.
 - **Long ranges:** the backend accepts at most 30 days within one calendar year per request. Longer ranges are split into consecutive requests and loaded one after another with a progress bar. Each request uses the backend's maximum `limit` of 50,000 lines. A request that returns exactly the limit shows a "may be incomplete" warning. A 502/503 from Borg is retried once.
-- **Refine:** search (product, code, client, document, invoice), sales vs returns, a **Tip venit** picker where grouping is enabled, and filters on product, category, gestiune, document type, channel, client, operator, agent and VAT rate.
+- **Refine:** search (product, code, client, document, invoice), line kind (sales, returns, discounts, services / special, unclassified), a **Tip venit** picker where grouping is enabled, and filters on product, category, gestiune, document type, channel, client, operator, agent and VAT rate.
 - **Gestiuni:** a part-to-whole panel shows each gestiune's share of the total for the chosen measure: a composition bar (top three in color, the rest folded into "Altele") and a table with every gestiune's value and share. Gestiuni are keyed by `gestiuneId`; `depozit` is their name.
 - **Clients:** grouped by Borg's `clientId` (then tax ID, then name), so different clients with the same name stay apart. Group the breakdown or split the trend by client; a breakdown row's filter button narrows the view to that one value.
-- **Measure:** net sales, gross sales (incl. VAT), gross margin, quantity or documents. The choice drives the trend, breakdown bars and heatmap.
+- **Measure:** net sales (every line), product sales, discounts, gross sales (incl. VAT), gross margin, quantity or documents. The choice drives the trend, breakdown bars and heatmap.
 - **Breakdown:** group by any dimension (including day, week, month, weekday, hour), optionally "then by" a second one. Rows expand, columns sort, and the result exports to CSV. The line table exports every refined line with all fields.
 
-Metric definitions: **documents** counts distinct `documentId`. **Margin %** is margin ÷ net, computed only over lines where Borg supplies a margin or cost; the KPI shows how much of net sales that covers. **Returns** are lines with a negative value or quantity.
+Metric definitions: **documents** counts distinct `documentId`. **Margin %** is margin ÷ net, computed only over lines where Borg supplies a margin or cost; the KPI shows how much of net sales that covers. **Returns** are product lines with a negative value or quantity.
 
-**Reconciled business reports:** the backend can supply private, authoritative
-Piese reports for a closed month. The dashboard labels this source and uses its
-lines consistently in KPIs, charts, tables and CSV exports. A **Discounturi** tile
-shows commercial discounts and the sales amount before them; discounts and
-business rounding adjustments are excluded from returned-goods counts. Net sales
-include signed `AIMS` reversals. For September 2026 the business markers are
-5,387,882.07 lei before discounts, 227,735.00 lei discounts and 5,160,147.07 lei net.
-The backend import keeps the CSV's −0.10 lei sales and +0.06 lei discount differences
-as explicit reconciliation entries. This requires the updated AGS-backend and its
-private report file; no business report data belongs in frontend assets. Warehouse
-queries and requests including internal transfers continue using live Borg data.
+**Products, discounts and services:** every row carries AGS's
+`businessValueKind`, and the dashboard computes all totals itself, in cents, from
+the authoritative `valoareNet`:
+
+- **Vânzări produse** (S) sums `sale` rows. Returns stay negative and reduce it.
+  Product values already include their line discounts and are never recomputed
+  from price, quantity or `discountProcent`.
+- **Discounturi** (D) is minus the sum of `discount` rows: granted discounts
+  (negative rows) minus reversals (positive rows), shown with D ÷ S. Rows flagged
+  `discountInclusInLinii` carry 0 and are not counted as separate transactions.
+- **Vânzări după discounturi** is S − D. `special` rows (services such as
+  Manoperă) and `unclassified` rows have their own tiles and filters and never
+  enter product sales; revenue-group breakdowns still include them.
+
+The three headline cards ignore the line-kind filter so they always describe
+the same scope; every other filter applies to both periods. Clicking the
+discount card shows the discount lines (granted vs reversed) directly below.
+Allocated discount shares arrive in their revenue group (`revenueGroupId`) as
+separate rows with their own `miscareId`; the CSV export includes the line kind,
+`sourceMiscareId` and allocation. When Borg truncates a request, the totals are
+marked partial and the previous-period comparison is withheld. The dashboard
+shows exactly what the API returns: there are no balancing rows or hardcoded
+totals.
 
 **Currency:** Borg returns lei. The **Lei / Euro** switch at the top right shows every amount, chart and CSV export in euro at an editable rate (default 5,10 lei per euro, `DEFAULT_EUR_RATE` in `src/lib/currency.ts`). Lei exports keep Borg's exact values; euro exports are rounded to cents.
 

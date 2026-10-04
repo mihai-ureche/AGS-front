@@ -77,7 +77,11 @@ function subscribe(listener: () => void) {
 
 /** The display currency, with formatters that take lei amounts as Borg returns them. */
 export function useCurrency() {
-  const prefs = useSyncExternalStore(subscribe, () => snapshot);
+  const prefs = useSyncExternalStore(
+    subscribe,
+    () => snapshot,
+    () => snapshot,
+  );
   return useMemo(() => {
     const convert = (lei: number) => convertFromLei(lei, prefs);
     return {

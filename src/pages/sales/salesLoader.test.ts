@@ -21,7 +21,7 @@ function mockApi() {
     version: "user-a-all-v1",
     denied: false,
     truncated: false,
-    lines: [raw],
+    lines: [raw] as Record<string, unknown>[],
   };
   const get = vi.fn(async (path: string) => {
     if (state.denied) throw new ApiError(403, "Access revoked");
@@ -44,43 +44,25 @@ const load = (api: Api, compare = false) =>
 afterEach(clearSalesCache);
 
 describe("sales cache and access", () => {
-  it("keeps business provenance when a reconciled month spans cached chunks", async () => {
-    const { api, get, state } = mockApi();
-    const report = {
-      targetEntity: "agritehnica",
-      groupId: "piese",
-      month: "2026-09",
-      label: "Raport business",
-      revision: "report-v1",
-      salesBeforeDiscounts: 5387882.07,
-      discounts: 227735,
-      csvSalesBeforeDiscounts: 5387882.17,
-      csvDiscounts: 227735.06,
+  it("keeps allocated discount shares as distinct rows", async () => {
+    const { api, state } = mockApi();
+    const share = {
+      ...raw,
+      businessValueKind: "discount",
+      sourceMiscareId: 900,
+      valoareNet: -10,
     };
-    get.mockImplementation(async (path) =>
-      path === "/api/revenue-groups"
-        ? {
-            accessVersion: state.version,
-            groups: [{ id: "piese", name: "Piese" }],
-          }
-        : {
-            accessVersion: state.version,
-            lines: state.lines,
-            possiblyTruncated: false,
-            reconciliations: [report],
-          },
-    );
-    const result = await loadSales(
-      api,
-      { ...query, to: "2026-10-01" },
-      false,
-      new AbortController().signal,
-      () => {},
-    );
-    expect(result.current.reconciliations).toEqual([report]);
-    expect(
-      get.mock.calls.filter(([path]) => path === "/api/borg/sales"),
-    ).toHaveLength(2);
+    state.lines = [
+      { ...share, miscareId: "900:piese", revenueGroupId: "piese" },
+      { ...share, miscareId: "900:utilaje", revenueGroupId: "utilaje" },
+    ];
+    const { current } = await load(api);
+    // Nothing is merged by sourceMiscareId.
+    expect(current.lines.map((line) => line.id)).toEqual([
+      "900:piese",
+      "900:utilaje",
+    ]);
+    expect(current).not.toHaveProperty("reconciliations");
   });
 
   it("revalidates access before cached reads and never shares chunks between scopes", async () => {

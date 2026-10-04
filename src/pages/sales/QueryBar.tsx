@@ -63,6 +63,7 @@ export function QueryBar({
           <option value="">Toate documentele</option>
           <option value="BFD">{docTypeLabels.BFD}</option>
           <option value="AIM">{docTypeLabels.AIM}</option>
+          <option value="AIMS">{docTypeLabels.AIMS}</option>
         </select>
       </label>
 

@@ -42,6 +42,12 @@ describe("sales URL params", () => {
     });
   });
 
+  it("accepts AIMS returns as a document type", () => {
+    const state = readParams(new URLSearchParams("doc=AIMS"), ["green"])!;
+    expect(state.docType).toBe("AIMS");
+    expect(writeParams(state).doc).toBe("AIMS");
+  });
+
   it("falls back to the default preset for invalid custom ranges and filters", () => {
     const state = readParams(
       new URLSearchParams(

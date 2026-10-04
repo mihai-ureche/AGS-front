@@ -9,14 +9,9 @@ import {
   dimensions,
   emptyRefine,
   filterableDimensions,
+  lineKindOptions,
 } from "../../lib/sales";
-import type { Dimension, LineKind, Refine, SaleLine } from "../../lib/sales";
-
-const kindOptions: { value: LineKind; label: string }[] = [
-  { value: "all", label: "Toate liniile" },
-  { value: "sales", label: "Vânzări" },
-  { value: "returns", label: "Retururi" },
-];
+import type { Dimension, Refine, SaleLine } from "../../lib/sales";
 
 export function RefineBar({
   lines,
@@ -102,7 +97,7 @@ export function RefineBar({
         <Segmented
           label="Tip linie"
           value={refine.kind}
-          options={kindOptions}
+          options={lineKindOptions}
           onChange={(kind) => onChange({ ...refine, kind })}
         />
         <Popover label="Filtru" icon={Filter} badge={active.length}>
