@@ -95,6 +95,11 @@ defaultGroupId, rules: [{ category, groupId }] }`.
     BorgLine & {
       revenueGroupId: string | null;
       revenueGroupName: string | null;
+      businessValueKind: "sale" | "discount" | "special" | "unclassified";
+      discountInclusInLinii: boolean | null;
+      // Allocated discount shares only:
+      discountAllocation?: unknown;
+      sourceMiscareId?: string;
     }
   >;
   possiblyTruncated: boolean;
@@ -115,6 +120,8 @@ The existing Borg range and line limits still apply.
 
 ## Frontend behavior
 
+AGS assigns allocated discount shares to revenue groups; the dashboard uses
+`revenueGroupId` as-is and never regroups discounts by their raw `grupa`.
 The dashboard provides a **Tip venit** filter, a default breakdown by revenue
 group where enabled, an optional chart split showing all revenue groups, and
 revenue group fields in line CSV exports. Existing categories and gestiuni remain

@@ -9,6 +9,8 @@ import { entityLabels } from "../lib/labels";
 import { useRoute } from "../lib/route";
 import {
   emptyRefine,
+  lineKindOptions,
+  matchesKind,
   metricOptions,
   refineLines,
   summarize,
@@ -87,9 +89,7 @@ function SalesHeading({
     <div className="page-heading">
       <div>
         <h1>Vânzări</h1>
-        <p>
-          {subtitle ?? "Vânzări din Borg și rapoarte reconciliate cu business."}
-        </p>
+        <p>{subtitle ?? "Vânzări din Borg, clasificate de AGS."}</p>
       </div>
       {(status || actions) && (
         <div className="page-actions">
@@ -139,28 +139,48 @@ function SalesDashboard({
   // After a failed load, hide older data: it may belong to different filters.
   const current = data.status === "error" ? undefined : data.current;
   const previous = state.compare ? data.previous : undefined;
-  const lines = useMemo(
-    () => (current ? refineLines(current.lines, refine) : []),
+  // The headline cards keep every line kind, so sales, discounts and their
+  // difference always describe the same scope; the kind filter narrows the
+  // charts and tables. Both periods share the same search and filters.
+  const scopeLines = useMemo(
+    () =>
+      current ? refineLines(current.lines, { ...refine, kind: "all" }) : [],
     [current, refine],
   );
-  const previousLines = useMemo(
-    () => (previous ? refineLines(previous.lines, refine) : undefined),
+  const previousScopeLines = useMemo(
+    () =>
+      previous
+        ? refineLines(previous.lines, { ...refine, kind: "all" })
+        : undefined,
     [previous, refine],
   );
-  const totals = useMemo(() => summarize(lines), [lines]);
-  const previousTotals = useMemo(
-    () => (previousLines ? summarize(previousLines) : undefined),
-    [previousLines],
+  const lines = useMemo(
+    () => scopeLines.filter((line) => matchesKind(line, refine.kind)),
+    [scopeLines, refine.kind],
   );
-  const visibleReports =
-    current?.reconciliations.filter((report) =>
-      lines.some(
-        (line) =>
-          line.source === "business-report" &&
-          line.revenueGroupId === report.groupId &&
-          line.date.startsWith(report.month),
-      ),
-    ) ?? [];
+  const previousLines = useMemo(
+    () => previousScopeLines?.filter((line) => matchesKind(line, refine.kind)),
+    [previousScopeLines, refine.kind],
+  );
+  const summary = useMemo(() => summarize(scopeLines), [scopeLines]);
+  const previousSummary = useMemo(
+    () => (previousScopeLines ? summarize(previousScopeLines) : undefined),
+    [previousScopeLines],
+  );
+  const totals = useMemo(() => summarize(lines), [lines]);
+  const kindLabel = lineKindOptions.find(
+    (option) => option.value === refine.kind,
+  )?.label;
+  const showingDiscounts = refine.kind === "discounts";
+  const toggleDiscounts = () => {
+    setRefine({ ...refine, kind: showingDiscounts ? "all" : "discounts" });
+    if (!showingDiscounts)
+      requestAnimationFrame(() =>
+        document
+          .getElementById("sales-lines")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+  };
 
   const loading = data.status === "loading";
   const rangeLabel =
@@ -235,7 +255,8 @@ function SalesDashboard({
           {truncated
             .map((range) => `${shortDate(range.from)}–${shortDate(range.to)}`)
             .join(", ")}
-          . Alegeți un interval mai scurt sau un tip de document pentru a vedea
+          . Totalurile afișate sunt parțiale și nu acoperă întreaga perioadă.
+          Alegeți un interval mai scurt sau un tip de document pentru a vedea
           toate liniile.
         </Alert>
       )}
@@ -288,31 +309,18 @@ function SalesDashboard({
             className={`dashboard-body ${loading ? "is-stale" : ""}`}
             aria-busy={loading}
           >
-            {visibleReports.length > 0 && (
-              <Alert tone="info" title="Vânzări reconciliate cu business">
-                {visibleReports
-                  .map(
-                    (report) =>
-                      `${data.groups?.find((group) => group.id === report.groupId)?.name ?? report.groupId} · ${report.month}`,
-                  )
-                  .join(", ")}{" "}
-                folosesc rapoartele business. Discounturile și stornările sunt
-                incluse în net; diferențele de rotunjire sunt afișate ca linii
-                de reconciliere în tabel și în CSV.
-              </Alert>
-            )}
             {!current.lines.length ? (
               <section className="panel">
                 <EmptyState
                   icon={CircleOff}
                   title="Nicio vânzare în această perioadă"
                 >
-                  Borg nu a returnat linii de produs pentru{" "}
+                  Borg nu a returnat linii de vânzare pentru{" "}
                   {entityLabels[state.entity]} în intervalul {rangeLabel}.
                   Încercați alt interval, alt tip de document sau alte opțiuni.
                 </EmptyState>
               </section>
-            ) : !lines.length ? (
+            ) : !scopeLines.length ? (
               <section className="panel">
                 <EmptyState
                   icon={SearchX}
@@ -332,96 +340,148 @@ function SalesDashboard({
               </section>
             ) : (
               <>
-                <Kpis current={totals} previous={previousTotals} />
+                <Kpis
+                  current={summary}
+                  previous={previousSummary}
+                  incomplete={current.truncated.length > 0}
+                  previousIncomplete={(previous?.truncated.length ?? 0) > 0}
+                  discountsShown={showingDiscounts}
+                  onShowDiscounts={toggleDiscounts}
+                />
+                {refine.kind !== "all" && (
+                  <p className="kpi-note">
+                    Cardurile de mai sus includ toate tipurile de linii din
+                    selecție. Filtrul „{kindLabel}” se aplică graficelor și
+                    tabelelor de mai jos.
+                  </p>
+                )}
 
-                <section className="panel" aria-labelledby="trend-title">
-                  <div className="panel-heading">
-                    <div>
-                      <h2 id="trend-title">Evoluție</h2>
-                      <p>
-                        {
-                          metricOptions.find((option) => option.key === metric)
-                            ?.label
-                        }
-                        {activeSplit === "none" && state.compare
-                          ? " comparativ cu perioada anterioară"
-                          : ""}
-                        {activeSplit !== "none"
-                          ? activeSplit === "revenueGroup"
-                            ? ", pe grupe de venit"
-                            : `, primele 3 valori după ${splitOptions.find((option) => option.value === activeSplit)?.label.toLowerCase()}`
-                          : ""}
-                      </p>
-                    </div>
-                    <div className="panel-controls">
-                      <label className="inline-select">
-                        <span>Împarte după</span>
-                        <select
-                          className="control"
-                          value={activeSplit}
-                          onChange={(event) =>
-                            setSplit(event.target.value as SplitBy)
-                          }
+                {!lines.length ? (
+                  <section className="panel" id="sales-lines">
+                    <EmptyState
+                      icon={SearchX}
+                      title={`Nicio linie de tipul „${kindLabel}”`}
+                      action={
+                        <button
+                          className="button button-secondary"
+                          onClick={() => setRefine({ ...refine, kind: "all" })}
                         >
-                          {splitOptions
-                            .filter(
-                              (option) =>
-                                revenueEnabled ||
-                                option.value !== "revenueGroup",
-                            )
-                            .map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                        </select>
-                      </label>
-                    </div>
-                  </div>
-                  <TrendChart
-                    lines={lines}
-                    paletteLines={current.lines}
-                    range={current.range}
-                    metric={metric}
-                    split={activeSplit}
-                    previous={
-                      previous && previousLines
-                        ? { lines: previousLines, range: previous.range }
-                        : undefined
-                    }
-                  />
-                </section>
+                          Afișați toate liniile
+                        </button>
+                      }
+                    >
+                      Selecția curentă nu conține astfel de linii.
+                    </EmptyState>
+                  </section>
+                ) : (
+                  <>
+                    {showingDiscounts && (
+                      <LinesTable
+                        lines={lines}
+                        filename={`${file}-discounturi.csv`}
+                        discounts
+                      />
+                    )}
 
-                <WarehouseShare
-                  lines={lines}
-                  paletteLines={current.lines}
-                  metric={metric}
-                  onFocus={focusOn}
-                />
+                    <section className="panel" aria-labelledby="trend-title">
+                      <div className="panel-heading">
+                        <div>
+                          <h2 id="trend-title">Evoluție</h2>
+                          <p>
+                            {
+                              metricOptions.find(
+                                (option) => option.key === metric,
+                              )?.label
+                            }
+                            {activeSplit === "none" && state.compare
+                              ? " comparativ cu perioada anterioară"
+                              : ""}
+                            {activeSplit !== "none"
+                              ? activeSplit === "revenueGroup"
+                                ? ", pe grupe de venit"
+                                : `, primele 3 valori după ${splitOptions.find((option) => option.value === activeSplit)?.label.toLowerCase()}`
+                              : ""}
+                          </p>
+                        </div>
+                        <div className="panel-controls">
+                          <label className="inline-select">
+                            <span>Împarte după</span>
+                            <select
+                              className="control"
+                              value={activeSplit}
+                              onChange={(event) =>
+                                setSplit(event.target.value as SplitBy)
+                              }
+                            >
+                              {splitOptions
+                                .filter(
+                                  (option) =>
+                                    revenueEnabled ||
+                                    option.value !== "revenueGroup",
+                                )
+                                .map((option) => (
+                                  <option
+                                    key={option.value}
+                                    value={option.value}
+                                  >
+                                    {option.label}
+                                  </option>
+                                ))}
+                            </select>
+                          </label>
+                        </div>
+                      </div>
+                      <TrendChart
+                        lines={lines}
+                        paletteLines={current.lines}
+                        range={current.range}
+                        metric={metric}
+                        split={activeSplit}
+                        previous={
+                          previous && previousLines
+                            ? { lines: previousLines, range: previous.range }
+                            : undefined
+                        }
+                      />
+                    </section>
 
-                <Breakdown
-                  lines={lines}
-                  metric={metric}
-                  dimension={activeDimension}
-                  revenueEnabled={revenueEnabled}
-                  thenBy={
-                    thenBy === "revenueGroup" && !revenueEnabled
-                      ? "none"
-                      : thenBy
-                  }
-                  onDimension={(next) => {
-                    setDimension(next);
-                    if (thenBy === next) setThenBy("none");
-                  }}
-                  onThenBy={setThenBy}
-                  onFocus={focusOn}
-                  total={totals}
-                  filename={`${file}-pe-${dimension}${thenBy === "none" ? "" : `-${thenBy}`}.csv`}
-                />
+                    <WarehouseShare
+                      lines={lines}
+                      paletteLines={current.lines}
+                      metric={metric}
+                      onFocus={focusOn}
+                    />
 
-                <Heatmap lines={lines} metric={metric} />
+                    <Breakdown
+                      lines={lines}
+                      metric={metric}
+                      dimension={activeDimension}
+                      revenueEnabled={revenueEnabled}
+                      thenBy={
+                        thenBy === "revenueGroup" && !revenueEnabled
+                          ? "none"
+                          : thenBy
+                      }
+                      onDimension={(next) => {
+                        setDimension(next);
+                        if (thenBy === next) setThenBy("none");
+                      }}
+                      onThenBy={setThenBy}
+                      onFocus={focusOn}
+                      total={totals}
+                      filename={`${file}-pe-${dimension}${thenBy === "none" ? "" : `-${thenBy}`}.csv`}
+                    />
 
-                <LinesTable lines={lines} filename={`${file}-linii.csv`} />
+                    <Heatmap lines={lines} metric={metric} />
+
+                    {!showingDiscounts && (
+                      <LinesTable
+                        lines={lines}
+                        filename={`${file}-linii.csv`}
+                      />
+                    )}
+                  </>
+                )}
               </>
             )}
           </div>

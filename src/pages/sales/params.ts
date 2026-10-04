@@ -21,6 +21,7 @@ export interface SalesParams {
 }
 
 export const DEFAULT_PRESET: PresetKey = "thisMonth";
+const docTypes: DocType[] = ["BFD", "AIM", "AIMS"];
 
 export function validateCustomRange(from: string, to: string): string | null {
   if (!isValidIso(from) || !isValidIso(to))
@@ -56,7 +57,7 @@ export function readParams(
     entity,
     range,
     ...dates,
-    docType: doc === "BFD" || doc === "AIM" ? doc : undefined,
+    docType: docTypes.find((type) => type === doc),
     gestiune:
       Number.isSafeInteger(gestiune) && gestiune > 0 ? gestiune : undefined,
     transfers: params.get("transfers") === "1",

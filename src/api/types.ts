@@ -71,26 +71,26 @@ export interface SalesAccess {
   groups: RevenueGroup[];
   accessVersion: string;
 }
+/**
+ * AGS's business classification of a sales row. Products are "sale" (returns
+ * included, negative); separate commercial discounts are "discount".
+ */
+export type BusinessValueKind =
+  "sale" | "discount" | "special" | "unclassified";
+
+/**
+ * GET /api/borg/sales?responseFormat=grouped. Each row carries authoritative
+ * amounts (valoareNet, valoareTVA, valoareTotal, costTotal, marja),
+ * businessValueKind, revenueGroupId/Name and discountInclusInLinii; allocated
+ * discount shares also carry discountAllocation and sourceMiscareId.
+ */
 export interface SalesResponse {
   lines: Record<string, unknown>[];
   possiblyTruncated: boolean;
   accessVersion: string;
-  reconciliations?: SalesReconciliation[];
 }
 
-export interface SalesReconciliation {
-  targetEntity: TargetEntity;
-  groupId: string;
-  month: string;
-  label: string;
-  revision: string;
-  salesBeforeDiscounts: number;
-  discounts: number;
-  csvSalesBeforeDiscounts: number;
-  csvDiscounts: number;
-}
-
-export type DocType = "BFD" | "AIM";
+export type DocType = "BFD" | "AIM" | "AIMS";
 
 export interface SalesQuery {
   targetEntity: TargetEntity;

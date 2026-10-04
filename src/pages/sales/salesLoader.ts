@@ -1,11 +1,7 @@
 import { ApiError } from "../../api/client";
 import type { Api } from "../../api/client";
 import { getSales, getSalesAccess } from "../../api/endpoints";
-import type {
-  SalesQuery,
-  SalesReconciliation,
-  SalesResponse,
-} from "../../api/types";
+import type { SalesQuery, SalesResponse } from "../../api/types";
 import { chunkRange, previousRange } from "../../lib/dates";
 import type { DateRange } from "../../lib/dates";
 import { normalizeLines } from "../../lib/sales";
@@ -15,8 +11,8 @@ export const LINE_LIMIT = 50_000;
 export interface Dataset {
   range: DateRange;
   lines: SaleLine[];
+  /** Chunks where Borg hit its line limit; totals over them are partial. */
   truncated: DateRange[];
-  reconciliations: SalesReconciliation[];
 }
 
 const cache = new Map<string, SalesResponse>();
@@ -81,7 +77,6 @@ export async function loadSales(
     for (const plan of plans) {
       const rows: Record<string, unknown>[] = [];
       const truncated: DateRange[] = [];
-      const reconciliations = new Map<string, SalesReconciliation>();
       for (const chunk of plan.chunks) {
         signal.throwIfAborted();
         const chunkQuery = { ...query, ...chunk };
@@ -114,19 +109,12 @@ export async function loadSales(
         }
         if (batch.possiblyTruncated) truncated.push(chunk);
         rows.push(...batch.lines);
-        for (const report of batch.reconciliations ?? []) {
-          reconciliations.set(
-            `${report.groupId}:${report.month}:${report.revision}`,
-            report,
-          );
-        }
         onProgress({ done: ++done, total });
       }
       datasets.push({
         range: plan.range,
         lines: normalizeLines(rows),
         truncated,
-        reconciliations: [...reconciliations.values()],
       });
     }
     // Do not publish a long load or comparison after access/config changed.
