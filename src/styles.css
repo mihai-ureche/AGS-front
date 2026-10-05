@@ -1079,6 +1079,112 @@ textarea.input {
   font-size: 13px;
 }
 
+.client-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  text-align: left;
+  cursor: pointer;
+}
+.client-toggle svg {
+  flex-shrink: 0;
+}
+.client-toggle span {
+  min-width: 180px;
+}
+.client-toggle small {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-muted);
+}
+.clients-table .client-detail-cell {
+  padding: 16px;
+  background: var(--surface-3);
+}
+.client-documents {
+  display: grid;
+  gap: 12px;
+}
+.client-documents-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.client-document-date {
+  white-space: nowrap;
+}
+.warehouse-picker {
+  align-items: center;
+}
+.warehouse-toggle {
+  border: 0;
+  padding: 4px 0;
+  background: transparent;
+  color: var(--accent-text);
+  text-align: left;
+  cursor: pointer;
+}
+.warehouse-toggle:hover,
+.warehouse-toggle[aria-pressed="true"] {
+  text-decoration: underline;
+}
+.client-composition {
+  display: grid;
+  gap: 12px;
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.client-composition-body {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  align-items: center;
+  gap: 24px;
+}
+.client-pie {
+  height: 260px;
+  min-width: 0;
+}
+.client-pie-legend {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+}
+.client-share-button {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.client-share-button:not(:disabled):hover {
+  background: var(--hover-wash);
+}
+.client-share-button:disabled {
+  cursor: default;
+  opacity: 1;
+}
+.client-share-button small {
+  grid-column: 2 / -1;
+  color: var(--text-muted);
+}
+@media (max-width: 640px) {
+  .client-composition-body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+}
+
 /* ---------- User sheet ---------- */
 
 .user-form {

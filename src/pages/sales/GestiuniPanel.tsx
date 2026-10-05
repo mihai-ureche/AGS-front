@@ -11,7 +11,12 @@ import {
   salesAfterDiscounts,
   summarize,
 } from "../../lib/sales";
-import type { MetricKey, SaleEntry, Share } from "../../lib/sales";
+import type {
+  MetricKey,
+  SaleEntry,
+  Share,
+  WarehouseFilter,
+} from "../../lib/sales";
 import { OTHER_COLOR, SERIES_COLORS } from "./TrendChart";
 
 const ROWS = 8;
@@ -21,10 +26,14 @@ export function GestiuniPanel({
   entries,
   metric,
   filename,
+  selected,
+  onSelect,
 }: {
   entries: SaleEntry[];
   metric: MetricKey;
   filename: string;
+  selected: WarehouseFilter;
+  onSelect: (warehouse: WarehouseFilter) => void;
 }) {
   const { currency, convert, money } = useCurrency();
   const [hover, setHover] = useState<string | null>(null);
@@ -102,7 +111,8 @@ export function GestiuniPanel({
           <h2 id="gestiuni-title">Vânzări pe gestiuni</h2>
           <p>
             {metricInfo.label} · {format(data.total)} în total,{" "}
-            {plural(data.rows.length, "gestiune", "gestiuni")}
+            {plural(data.rows.length, "gestiune", "gestiuni")}. Selectați un
+            depozit pentru a filtra vânzările și clienții.
           </p>
         </div>
         <div className="panel-controls">
@@ -175,14 +185,27 @@ export function GestiuniPanel({
                   onPointerLeave={() => setHover(null)}
                 >
                   <th scope="row">
-                    <div className="group-cell">
+                    <button
+                      className="group-cell warehouse-toggle"
+                      aria-pressed={
+                        row.key ===
+                        (selected === "none" ? "none" : `id:${selected}`)
+                      }
+                      onClick={() =>
+                        onSelect(
+                          row.key === "none"
+                            ? "none"
+                            : Number(row.key.slice(3)),
+                        )
+                      }
+                    >
                       <i
                         className="legend-swatch"
                         style={{ background: colorOf(row.slot) }}
                         aria-hidden="true"
                       />
                       <span className="group-name">{row.name}</span>
-                    </div>
+                    </button>
                   </th>
                   <td className={`num ${metrics.sales < 0 ? "negative" : ""}`}>
                     {money(metrics.sales)}

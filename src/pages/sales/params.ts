@@ -7,8 +7,8 @@ import {
   presetRange,
 } from "../../lib/dates";
 import type { PresetKey } from "../../lib/dates";
-import { groupChoices, SALES_ENTITY } from "../../lib/sales";
-import type { GroupFilter } from "../../lib/sales";
+import { groupChoices, SALES_ENTITY, salesGroupOf } from "../../lib/sales";
+import type { GroupFilter, WarehouseFilter } from "../../lib/sales";
 
 /** Query settings; kept in the URL so views can be bookmarked and shared. */
 export interface SalesParams {
@@ -18,6 +18,8 @@ export interface SalesParams {
   compare: boolean;
   /** Which gestiune group to show; a view filter, so it never refetches. */
   group: GroupFilter;
+  /** A depot view filter; applied locally to both current and previous periods. */
+  warehouse: WarehouseFilter;
 }
 
 export const DEFAULT_PRESET: PresetKey = "thisMonth";
@@ -45,11 +47,30 @@ export function readParams(params: URLSearchParams): SalesParams {
     dates = { from, to };
   }
   const group = params.get("group");
+  const groupFilter =
+    groupChoices.find((item) => item.key === group)?.key ?? "all";
+  const warehouseParam = params.get("warehouse");
+  let warehouse: WarehouseFilter = "all";
+  if (warehouseParam === "none") warehouse = "none";
+  else if (
+    warehouseParam &&
+    /^[1-9]\d*$/.test(warehouseParam) &&
+    Number.isSafeInteger(Number(warehouseParam))
+  )
+    warehouse = Number(warehouseParam);
+  if (
+    warehouse !== "all" &&
+    groupFilter !== "all" &&
+    salesGroupOf({ warehouseId: warehouse === "none" ? null : warehouse }) !==
+      groupFilter
+  )
+    warehouse = "all";
   return {
     range,
     ...dates,
     compare: params.get("compare") === "1",
-    group: groupChoices.find((item) => item.key === group)?.key ?? "all",
+    group: groupFilter,
+    warehouse,
   };
 }
 
@@ -62,6 +83,7 @@ export function writeParams(
     to: state.range === "custom" ? state.to : undefined,
     compare: state.compare ? "1" : undefined,
     group: state.group === "all" ? undefined : state.group,
+    warehouse: state.warehouse === "all" ? undefined : String(state.warehouse),
   };
 }
 

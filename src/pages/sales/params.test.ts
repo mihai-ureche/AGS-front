@@ -12,6 +12,7 @@ describe("sales URL params", () => {
     expect(state.range).toBe("thisMonth");
     expect(state.compare).toBe(false);
     expect(state.group).toBe("all");
+    expect(state.warehouse).toBe("all");
   });
 
   it("reads and writes the gestiune group, ignoring unknown ones", () => {
@@ -53,6 +54,7 @@ describe("sales URL params", () => {
       to: "2026-09-24",
       compare: "1",
       group: undefined,
+      warehouse: undefined,
     });
   });
 
@@ -69,6 +71,7 @@ describe("sales URL params", () => {
       to: undefined,
       compare: undefined,
       group: undefined,
+      warehouse: undefined,
     });
   });
 
@@ -78,6 +81,36 @@ describe("sales URL params", () => {
       from: expect.any(String),
       to: expect.any(String),
     });
+  });
+
+  it("round-trips depot filters without adding unsupported API filters", () => {
+    for (const warehouse of ["2", "none"]) {
+      const state = readParams(new URLSearchParams(`warehouse=${warehouse}`));
+      expect(writeParams(state).warehouse).toBe(warehouse);
+      expect(toQuery(state)).toEqual(
+        toQuery(readParams(new URLSearchParams())),
+      );
+    }
+    for (const warehouse of ["bad", "0", "-1", "1.5", "9007199254740992"])
+      expect(
+        readParams(new URLSearchParams(`warehouse=${warehouse}`)).warehouse,
+      ).toBe("all");
+  });
+
+  it("clears depot filters that conflict with the selected group", () => {
+    expect(
+      readParams(new URLSearchParams("group=piese&warehouse=2")).warehouse,
+    ).toBe(2);
+    expect(
+      readParams(new URLSearchParams("group=utilaje&warehouse=2")).warehouse,
+    ).toBe("all");
+    expect(
+      readParams(new URLSearchParams("group=piese&warehouse=none")).warehouse,
+    ).toBe("all");
+    expect(
+      readParams(new URLSearchParams("group=unassigned&warehouse=none"))
+        .warehouse,
+    ).toBe("none");
   });
 
   it("falls back to the default preset for invalid custom ranges", () => {

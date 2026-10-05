@@ -83,8 +83,9 @@ export interface SalesMeta {
 
 /**
  * GET /api/borg/sales: Borg's accounting ledger entries, forwarded unchanged.
- * There is no product, category or client; amounts are `suma` in lei, posted
- * between `contDebit` and `contCredit`. Fields are read defensively in
+ * There are no product lines or categories. Clients are the third parties on
+ * the debit side of 707 entries and the credit side of 709 entries. Amounts are
+ * `suma` in lei, posted between `contDebit` and `contCredit`. Fields are read defensively in
  * lib/sales.ts because the backend does not validate Borg's format.
  */
 export interface SalesResponse {

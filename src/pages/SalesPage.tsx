@@ -9,6 +9,7 @@ import { entityLabels } from "../lib/labels";
 import { useRoute } from "../lib/route";
 import {
   inGroup,
+  inWarehouse,
   metricOptions,
   SALES_ACCOUNTS,
   SALES_ENTITY,
@@ -17,6 +18,8 @@ import {
 } from "../lib/sales";
 import type { MetricKey } from "../lib/sales";
 import { CurrencyControl } from "./sales/CurrencyControl";
+import { ClientsPanel } from "./sales/ClientsPanel";
+import { WarehousePicker } from "./sales/WarehousePicker";
 import { GestiuniPanel } from "./sales/GestiuniPanel";
 import { GroupTabs } from "./sales/GroupTabs";
 import { Kpis } from "./sales/Kpis";
@@ -139,13 +142,20 @@ function SalesDashboard({
   const previous = state.compare ? data.previous : undefined;
   // The group is a view over the loaded period, so switching never refetches.
   const group = groupChoices.find((item) => item.key === state.group);
-  const entries = useMemo(
+  const groupedEntries = useMemo(
     () => (current ? inGroup(current.entries, state.group) : []),
     [current, state.group],
   );
+  const entries = useMemo(
+    () => inWarehouse(groupedEntries, state.warehouse),
+    [groupedEntries, state.warehouse],
+  );
   const previousEntries = useMemo(
-    () => (previous ? inGroup(previous.entries, state.group) : undefined),
-    [previous, state.group],
+    () =>
+      previous
+        ? inWarehouse(inGroup(previous.entries, state.group), state.warehouse)
+        : undefined,
+    [previous, state.group, state.warehouse],
   );
   const summary = useMemo(
     () => (current ? summarize(entries) : undefined),
@@ -165,7 +175,18 @@ function SalesDashboard({
     ...(current?.truncated ?? []),
     ...(previous?.truncated ?? []),
   ];
-  const file = `ags-${SALES_ENTITY}-${state.from}_${state.to}`;
+  const warehouseName =
+    state.warehouse === "all"
+      ? undefined
+      : (groupedEntries.find(
+          (entry) =>
+            entry.warehouseId ===
+            (state.warehouse === "none" ? null : state.warehouse),
+        )?.warehouse ??
+        (state.warehouse === "none"
+          ? "Fără gestiune"
+          : `Gestiunea ${state.warehouse}`));
+  const file = `ags-${SALES_ENTITY}-${state.from}_${state.to}${group ? `-${group.slug}` : ""}${state.warehouse === "all" ? "" : `-depozit-${state.warehouse}`}`;
   const status =
     current && data.loadedAt
       ? `${plural(current.entries.length, "înregistrare", "înregistrări")} · încărcate la ${data.loadedAt.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}`
@@ -174,7 +195,7 @@ function SalesDashboard({
   return (
     <>
       <SalesHeading
-        subtitle={`Registrul contabil Borg · ${entityLabels[SALES_ENTITY]} · ${rangeLabel}${group ? ` · ${group.label}` : ""}`}
+        subtitle={`Registrul contabil Borg · ${entityLabels[SALES_ENTITY]} · ${rangeLabel}${group ? ` · ${group.label}` : ""}${warehouseName ? ` · ${warehouseName}` : ""}`}
         status={status}
         actions={<CurrencyControl />}
       />
@@ -274,17 +295,28 @@ function SalesDashboard({
               <GroupTabs
                 entries={current.entries}
                 value={state.group}
-                onChange={(next) => onChange({ group: next })}
+                onChange={(next) => onChange({ group: next, warehouse: "all" })}
+              />
+              <WarehousePicker
+                entries={groupedEntries}
+                value={state.warehouse}
+                onChange={(warehouse) => onChange({ warehouse })}
               />
               {!entries.length ? (
                 <section className="panel">
                   <EmptyState
                     icon={CircleOff}
-                    title={`Nicio vânzare în grupa „${group?.label}”`}
+                    title={
+                      warehouseName
+                        ? `Nicio vânzare în depozitul „${warehouseName}”`
+                        : `Nicio vânzare în ${group ? `grupa „${group.label}”` : "depozitele selectate"}`
+                    }
                     action={
                       <button
                         className="button button-secondary"
-                        onClick={() => onChange({ group: "all" })}
+                        onClick={() =>
+                          onChange({ group: "all", warehouse: "all" })
+                        }
                       >
                         Afișați toate gestiunile
                       </button>
@@ -382,7 +414,15 @@ function SalesDashboard({
                   <GestiuniPanel
                     entries={entries}
                     metric={metric}
-                    filename={`${file}${group ? `-${group.slug}` : ""}-pe-gestiuni.csv`}
+                    filename={`${file}-pe-gestiuni.csv`}
+                    selected={state.warehouse}
+                    onSelect={(warehouse) => onChange({ warehouse })}
+                  />
+                  <ClientsPanel
+                    entries={entries}
+                    metric={metric}
+                    incomplete={current.truncated.length > 0}
+                    filename={file}
                   />
                 </>
               )}

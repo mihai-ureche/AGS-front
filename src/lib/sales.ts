@@ -74,8 +74,8 @@ export const SALES_ACCOUNTS = ["707", "709"] as const;
 
 /**
  * A ledger entry that counts toward sales or discounts, read from Borg's
- * accounting ledger (`/api/borg/sales`). The ledger has no products, clients or
- * categories, so an entry is placed by its accounts and its gestiune alone.
+ * accounting ledger (`/api/borg/sales`). Entries carry client information,
+ * but no product lines or categories.
  */
 export interface SaleEntry {
   /** Borg's ledger entry ID; unique, so the same entry is never counted twice. */
@@ -87,6 +87,10 @@ export interface SaleEntry {
   /** Borg's gestiune ID; `warehouse` is its name (`depozit`). */
   warehouseId: number | null;
   warehouse: string;
+  clientId: string | null;
+  client: string;
+  clientTaxId: string | null;
+  description: string | null;
   /** The 707/709 account this entry was classified by. */
   account: string;
   kind: "sale" | "discount";
@@ -141,6 +145,7 @@ export function normalizeEntry(raw: Record<string, unknown>): SaleEntry | null {
   let kind: SaleEntry["kind"];
   let account: string;
   let amount: number | null;
+  let clientSide: "Debit" | "Credit" = "Debit";
   if (discountAccount.test(credit)) {
     [kind, account, amount] = [
       "discount",
@@ -151,12 +156,14 @@ export function normalizeEntry(raw: Record<string, unknown>): SaleEntry | null {
     [kind, account, amount] = ["sale", credit, suma];
   } else if (contraAccount.test(debit)) {
     [kind, account, amount] = ["discount", debit, suma];
+    clientSide = "Credit";
   } else {
     return null;
   }
   if (!id || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || amount === null)
     return null;
   const warehouseId = num(raw.gestiuneId);
+  const clientId = text(raw[`tert${clientSide}Id`]);
   return {
     id,
     documentId: text(raw.documentId),
@@ -167,6 +174,12 @@ export function normalizeEntry(raw: Record<string, unknown>): SaleEntry | null {
     warehouse:
       text(raw.depozit) ??
       (warehouseId === null ? "Fără gestiune" : `Gestiunea ${warehouseId}`),
+    clientId,
+    client:
+      text(raw[`tert${clientSide}`]) ??
+      (clientId === null ? "Fără client" : `Client ${clientId}`),
+    clientTaxId: text(raw[`tert${clientSide}CodFiscal`]),
+    description: text(raw.explicatii),
     account,
     kind,
     amount,
@@ -219,6 +232,19 @@ export const inGroup = <T extends Pick<SaleEntry, "warehouseId">>(
   group === "all"
     ? entries
     : entries.filter((entry) => salesGroupOf(entry) === group);
+
+export type WarehouseFilter = "all" | "none" | number;
+
+export const inWarehouse = <T extends Pick<SaleEntry, "warehouseId">>(
+  entries: T[],
+  warehouse: WarehouseFilter,
+) =>
+  warehouse === "all"
+    ? entries
+    : entries.filter(
+        (entry) =>
+          entry.warehouseId === (warehouse === "none" ? null : warehouse),
+      );
 
 // ---------------------------------------------------------------------------
 // Dimensions
