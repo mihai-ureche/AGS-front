@@ -16,31 +16,16 @@ import { compact, formatMoney, number } from "../../lib/format";
 import {
   bucketFor,
   dimensions,
-  groupLines,
+  groupEntries,
   metricOptions,
   timeSeries,
 } from "../../lib/sales";
-import type { Dimension, MetricKey, SaleLine } from "../../lib/sales";
+import type { Dimension, MetricKey, SaleEntry } from "../../lib/sales";
 
-export type SplitBy =
-  | "none"
-  | Extract<
-      Dimension,
-      | "revenueGroup"
-      | "docType"
-      | "warehouse"
-      | "category"
-      | "channel"
-      | "client"
-    >;
+export type SplitBy = "none" | Dimension;
 export const splitOptions: { value: SplitBy; label: string }[] = [
   { value: "none", label: "Fără împărțire" },
-  { value: "revenueGroup", label: "Tip venit" },
-  { value: "docType", label: "Tip document" },
   { value: "warehouse", label: "Gestiune" },
-  { value: "category", label: "Categorie" },
-  { value: "channel", label: "Canal" },
-  { value: "client", label: "Client" },
 ];
 
 // Categorical slots 1–3: brand green, blue, orange. Validated for stacks (adjacent
@@ -52,33 +37,23 @@ export const SERIES_COLORS = [
   "var(--series-3)",
 ];
 export const OTHER_COLOR = "var(--series-other)";
-const revenueColors: Record<string, string> = {
-  utilaje: "var(--series-1)",
-  irigatii: "var(--series-2)",
-  piese: "var(--series-3)",
-  manopera: "#8b5cf6",
-  other: OTHER_COLOR,
-};
 
 type Series = { key: string; name: string; color: string };
 
 const bucketNames = { day: "zi", week: "săptămână", month: "lună" };
 
 export function TrendChart({
-  lines,
-  paletteLines,
+  entries,
   range,
   metric,
   split,
   previous,
 }: {
-  lines: SaleLine[];
-  /** Unrefined lines: the split's top values (and so their colors) stay put while refining. */
-  paletteLines: SaleLine[];
+  entries: SaleEntry[];
   range: DateRange;
   metric: MetricKey;
   split: SplitBy;
-  previous?: { lines: SaleLine[]; range: DateRange };
+  previous?: { entries: SaleEntry[]; range: DateRange };
 }) {
   const { currency, convert } = useCurrency();
   const metricInfo = metricOptions.find((option) => option.key === metric)!;
@@ -91,23 +66,20 @@ export function TrendChart({
       return [
         { key: "value", name: "Perioada curentă", color: SERIES_COLORS[0]! },
       ];
-    const groups = groupLines(paletteLines, split, metric);
-    const count = split === "revenueGroup" ? groups.length : 3;
+    const groups = groupEntries(entries, split, metric);
+    const count = SERIES_COLORS.length;
     const top = groups.slice(0, count).map((group, index) => ({
       key: `s:${group.key}`,
       name: group.name,
-      color:
-        split === "revenueGroup"
-          ? (revenueColors[group.key] ?? OTHER_COLOR)
-          : SERIES_COLORS[index]!,
+      color: SERIES_COLORS[index]!,
     }));
     return groups.length > count
       ? [...top, { key: "other", name: "Altele", color: OTHER_COLOR }]
       : top;
-  }, [paletteLines, split, metric]);
+  }, [entries, split, metric]);
 
   const data = useMemo(() => {
-    const points = timeSeries(lines, range, metric, {
+    const points = timeSeries(entries, range, metric, {
       split: split === "none" ? undefined : split,
       splitKeys: series
         .filter((item) => item.key.startsWith("s:"))
@@ -121,7 +93,7 @@ export function TrendChart({
         if (typeof value === "number") converted[key] = convert(value);
       return converted;
     });
-  }, [lines, range, metric, split, series, previous, metricInfo, convert]);
+  }, [entries, range, metric, split, series, previous, metricInfo, convert]);
 
   const showPrevious = split === "none" && Boolean(previous);
   const legend: (Series & { dashed?: boolean })[] = showPrevious

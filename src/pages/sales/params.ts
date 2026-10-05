@@ -1,4 +1,4 @@
-import type { DocType, SalesQuery, TargetEntity } from "../../api/types";
+import type { SalesQuery } from "../../api/types";
 import {
   daysInclusive,
   isPresetKey,
@@ -7,21 +7,20 @@ import {
   presetRange,
 } from "../../lib/dates";
 import type { PresetKey } from "../../lib/dates";
+import { SALES_ENTITY, salesGroups } from "../../lib/sales";
+import type { GroupFilter } from "../../lib/sales";
 
-/** Server-side sales filters; kept in the URL so views can be bookmarked and shared. */
+/** Query settings; kept in the URL so views can be bookmarked and shared. */
 export interface SalesParams {
-  entity: TargetEntity;
   range: PresetKey | "custom";
   from: string;
   to: string;
-  docType?: DocType;
-  gestiune?: number;
-  transfers: boolean;
   compare: boolean;
+  /** Which gestiune group to show; a view filter, so it never refetches. */
+  group: GroupFilter;
 }
 
 export const DEFAULT_PRESET: PresetKey = "thisMonth";
-const docTypes: DocType[] = ["BFD", "AIM", "AIMS"];
 
 export function validateCustomRange(from: string, to: string): string | null {
   if (!isValidIso(from) || !isValidIso(to))
@@ -33,13 +32,7 @@ export function validateCustomRange(from: string, to: string): string | null {
   return null;
 }
 
-export function readParams(
-  params: URLSearchParams,
-  entities: TargetEntity[],
-): SalesParams | null {
-  if (!entities.length) return null;
-  const entityParam = params.get("entity");
-  const entity = entities.find((item) => item === entityParam) ?? entities[0]!;
+export function readParams(params: URLSearchParams): SalesParams {
   const rangeParam = params.get("range");
   const from = params.get("from") ?? "";
   const to = params.get("to") ?? "";
@@ -51,17 +44,12 @@ export function readParams(
     range = "custom";
     dates = { from, to };
   }
-  const doc = params.get("doc");
-  const gestiune = Number(params.get("gestiune"));
+  const group = params.get("group");
   return {
-    entity,
     range,
     ...dates,
-    docType: docTypes.find((type) => type === doc),
-    gestiune:
-      Number.isSafeInteger(gestiune) && gestiune > 0 ? gestiune : undefined,
-    transfers: params.get("transfers") === "1",
     compare: params.get("compare") === "1",
+    group: salesGroups.find((item) => item.key === group)?.key ?? "all",
   };
 }
 
@@ -69,24 +57,14 @@ export function writeParams(
   state: SalesParams,
 ): Record<string, string | undefined> {
   return {
-    entity: state.entity,
     range: state.range,
     from: state.range === "custom" ? state.from : undefined,
     to: state.range === "custom" ? state.to : undefined,
-    doc: state.docType,
-    gestiune: state.gestiune ? String(state.gestiune) : undefined,
-    transfers: state.transfers ? "1" : undefined,
     compare: state.compare ? "1" : undefined,
+    group: state.group === "all" ? undefined : state.group,
   };
 }
 
 export function toQuery(state: SalesParams): SalesQuery {
-  return {
-    targetEntity: state.entity,
-    from: state.from,
-    to: state.to,
-    docType: state.docType,
-    gestiune: state.gestiune,
-    includeTransfers: state.transfers,
-  };
+  return { targetEntity: SALES_ENTITY, from: state.from, to: state.to };
 }

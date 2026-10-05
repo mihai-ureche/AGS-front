@@ -10,7 +10,6 @@ import { targetEntities } from "../api/types";
 import type { RevenueConfiguration, TargetEntity } from "../api/types";
 import { Alert, Spinner } from "../components/ui";
 import { entityLabels } from "../lib/labels";
-import { CategoryUsagePanel } from "./revenue/CategoryUsagePanel";
 import { clearSalesCache } from "./sales/salesLoader";
 
 export function RevenueGroupsPage() {
@@ -253,13 +252,6 @@ export function RevenueGroupsPage() {
             </fieldset>
           </form>
         )
-      )}
-      {config && (
-        <CategoryUsagePanel
-          entity={entity}
-          groups={config.groups}
-          revision={config.revision}
-        />
       )}
     </>
   );
