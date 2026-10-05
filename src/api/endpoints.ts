@@ -7,7 +7,6 @@ import type {
   TargetEntity,
   User,
   RevenueConfiguration,
-  SalesAccess,
   SalesResponse,
 } from "./types";
 
@@ -19,8 +18,8 @@ export async function saveCurrentUser(api: Api) {
   return (await api.post<{ user: User }>("/api/users")).user;
 }
 
-export async function getMe(api: Api) {
-  return (await api.get<{ user: Me }>("/api/me")).user;
+export async function getMe(api: Api, signal?: AbortSignal) {
+  return (await api.get<{ user: Me }>("/api/me", { signal })).user;
 }
 
 /** The backend pages users at 100 per request; organizations are small, so load them all. */
@@ -70,17 +69,6 @@ export function deleteRole(api: Api, name: string) {
   return api.delete(`/api/roles/${encodeURIComponent(name)}`);
 }
 
-export function getSalesAccess(
-  api: Api,
-  targetEntity: TargetEntity,
-  signal?: AbortSignal,
-) {
-  return api.get<SalesAccess>("/api/revenue-groups", {
-    query: { targetEntity },
-    signal,
-  });
-}
-
 export function getRevenueConfiguration(
   api: Api,
   entity: TargetEntity,
@@ -119,10 +107,13 @@ export async function updateRoleSalesGroups(
   ).role;
 }
 
-/** Classified, authorized lines with completeness metadata from the backend. */
+/**
+ * Borg's ledger entries that touch one account (a code or prefix, matched on
+ * the debit or the credit side). Intervals are limited to 30 days in one year.
+ */
 export function getSales(
   api: Api,
-  query: SalesQuery & { limit: number },
+  query: SalesQuery & { account: string; limit: number },
   signal?: AbortSignal,
 ) {
   return api.get<SalesResponse>("/api/borg/sales", {
@@ -130,11 +121,8 @@ export function getSales(
       targetEntity: query.targetEntity,
       from: query.from,
       to: query.to,
-      docType: query.docType,
-      gestiune: query.gestiune,
+      account: query.account,
       limit: query.limit,
-      includeTransfers: query.includeTransfers ?? false,
-      responseFormat: "grouped",
     },
     signal,
   });

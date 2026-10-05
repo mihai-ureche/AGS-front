@@ -2,11 +2,11 @@
 
 Web frontend for [AGS-backend](../AGS-backend). The interface is in Romanian and uses the Agritehnica brand greens and mark from [agritehnica.ro](https://www.agritehnica.ro/). Users sign in with their Microsoft work account. What they see depends on the role and entity grants stored in the backend:
 
-| Page      | Shown with   | What it does                                                                                                                                                           |
-| --------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Sales** | `sales:read` | Dashboard over Borg product lines for the entities granted to you: KPIs, trend, breakdowns with two-level grouping, weekday × hour heatmap, line detail and CSV export |
-| **Users** | `users:read` | Assign roles and entity access, activate/deactivate and soft-delete users (`admin` only)                                                                               |
-| **Roles** | `roles:read` | Inspect roles and their permissions; create and delete custom roles (`admin` only)                                                                                     |
+| Page      | Shown with   | What it does                                                                                                                                |
+| --------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Sales** | `sales:read` | Agritehnica sales from Borg's accounting ledger (accounts 707 and 709), grouped by gestiune: KPIs, trend, per-gestiune table and CSV export |
+| **Users** | `users:read` | Assign roles and entity access, activate/deactivate and soft-delete users (`admin` only)                                                    |
+| **Roles** | `roles:read` | Inspect roles and their permissions; create and delete custom roles (`admin` only)                                                          |
 
 Users and Roles sit under the **Administrare** menu in the sidebar. Navigation mirrors the permissions from `GET /api/me`. The backend enforces every permission independently. Signed-in users whose role grants none of these see a "waiting for access" screen with their AGS user ID.
 
@@ -54,63 +54,58 @@ Every new user starts with the `user` role and no entity grants. To bootstrap:
 
 ## Sales dashboard
 
-The query bar at the top loads data from `GET /api/borg/sales`. The refine bar below it filters the loaded lines in the browser.
+The dashboard shows **Agritehnica** only, grouped by gestiune. It reads
+`GET /api/borg/sales`, which returns Borg's accounting ledger entries
+(`{ meta, entries }`) rather than product lines. The dashboard keeps client
+identities and document descriptions, but product names, quantities, categories
+and margin are unavailable from these ledger entries.
 
-- **Query:** entity (only granted ones), date range (presets or custom, up to 366 days), document type (BFD receipts / AIM delivery notes / AIMS delivery-note reversals), warehouse ID (`gestiune`), include transfers, and compare with the previous period of equal length. These settings live in the URL hash, so views can be bookmarked and shared.
-- **Long ranges:** the backend accepts at most 30 days within one calendar year per request. Longer ranges are split into consecutive requests and loaded one after another with a progress bar. Each request uses the backend's maximum `limit` of 50,000 lines. A request that returns exactly the limit shows a "may be incomplete" warning. A 502/503 from Borg is retried once.
-- **Refine:** search (product, code, client, document, invoice), line kind (sales, returns, discounts, services / special, unclassified), a **Tip venit** picker where grouping is enabled, and filters on product, category, gestiune, document type, channel, client, operator, agent and VAT rate.
-- **Gestiuni:** a part-to-whole panel shows each gestiune's share of the total for the chosen measure: a composition bar (top three in color, the rest folded into "Altele") and a table with every gestiune's value and share. Gestiuni are keyed by `gestiuneId`; `depozit` is their name.
-- **Clients:** grouped by Borg's `clientId` (then tax ID, then name), so different clients with the same name stay apart. Group the breakdown or split the trend by client; a breakdown row's filter button narrows the view to that one value.
-- **Measure:** net sales (every line), product sales, discounts, gross sales (incl. VAT), gross margin, quantity or documents. The choice drives the trend, breakdown bars and heatmap.
-- **Breakdown:** group by any dimension (including day, week, month, weekday, hour), optionally "then by" a second one. Rows expand, columns sort, and the result exports to CSV. The line table exports every refined line with all fields.
+- **Query:** date range (presets or custom, up to 366 days) and a comparison with the previous period of equal length. These settings live in the URL hash, so views can be bookmarked and shared. The entity is fixed; other entities' ledgers are not shown.
+- **What counts as a sale** (`src/lib/sales.ts`), by the account an entry is posted to, excluding VAT:
+  - **Vânzări:** the credit leg on `707.G.*`. Credit notes (`FCS`) and delivery-note reversals (`AIMS`) are negative amounts and reduce sales; they are also shown as **Stornări**.
+  - **Discounturi:** the credit leg on `707.Discount.*` (booked as negative amounts) plus the debit leg on `709`. A reversal reduces the discount.
+  - **Vânzări după discounturi** is sales minus discounts.
+  - Only these natural sides count. A document's total line (`tipCompunere` 10, no credit account), the VAT legs (`4427`, `4428`), services (`704`), other revenue (`7588`), stock cost (`607`/`371`) and the opposite side of 707/709 (such as a month-end closing) are not sales. Entries that touch 707/709 but cannot count are reported in a note under the cards.
+- **Requests:** each 30-day chunk makes two requests, `account=707` and `account=709`, merged and de-duplicated by the entry `id`. Long ranges are loaded one request after another with a progress bar, at the backend's maximum `limit` of 50,000. `meta.truncated` is exact; a truncated chunk marks the totals as partial and withholds the previous-period comparison. A 502/503 from Borg is retried once. A bad `account` or any filter the backend does not know returns `400`, so the page sends only `targetEntity`, `from`, `to`, `account` and `limit`.
+- **Gestiune groups:** the gestiuni are split into **Piese** (IDs 1, 2, 6, 9, 10, 14: the six depots), **Utilaje** (8, 16, 17, 18, 19, 20) and **Irigații** (15). A gestiune in no list, and an entry without a gestiune, is **Nealocate**; that tab appears only when it has sales, so the groups always add up to the total and a new or forgotten gestiune shows up instead of being filed under a group. Tabs above the cards switch between Toate and each group, and every figure, the trend, the table and the CSV follow the tab; each tab shows its sales after discounts. The group is a view over the loaded period, so switching does not reload, and it is kept in the URL (`group=piese|utilaje|irigatii|unassigned`). The membership is a fixed list in `src/lib/sales.ts` (`salesGroups`, one list of `[id, name]` per group); changing it means editing that list.
+- **Gestiuni:** entries are grouped by `gestiuneId` and named by their `depozit`. An entry without a gestiune lands in **Fără gestiune** so the rows add up to the total. The account suffix is not the gestiune (`707.G.15` is booked in gestiune 16), so the entry's own `gestiuneId` is used. The panel shows the share strip (top three in color, the rest as "Altele") and a table with sales, discounts, sales after discounts, documents and share, with a total row and a CSV export.
+- **Depot selection:** click a depot name in the gestiune table or use the **Depozit** selector below the group tabs. KPIs, the trend, clients, documents, current/previous comparisons and CSV exports all use that depot. **Toate depozitele** clears the filter; switching groups clears it too. The selection is saved in the URL (`warehouse=<id>` or `warehouse=none`) and applied locally without another Borg request. Export filenames include the depot. The group tabs continue showing each group's overall totals.
+- **Clients:** **Vânzări pe clienți** lists clients with ledger activity in the selected period and gestiune group. Search matches names or CUI regardless of case and Romanian diacritics, across the complete loaded list. The first 20 matching clients are shown initially; **Afișează toți clienții** reveals the rest. Selecting a client expands their documents, dates, gestiuni, descriptions, sales, discounts and sales after discounts. CSV exports include every matching client or all documents of the selected client, regardless of the visible row limit, in the chosen currency. Clients come from the debit third party (`tertDebit*`) on 707 entries and the credit third party (`tertCredit*`) on 709 discounts, grouped by ID with CUI/name fallbacks. Missing clients remain visible as **Fără client**, so amounts reconcile with the dashboard. This is a list of clients with activity, not the entire Borg client directory; product-level purchases require another data source. Searching this panel leaves the overall KPIs, trend and warehouse table scoped to the selected period/group.
+- **Client pie chart:** above the client table, **Ponderea clienților în vânzări** shows sales before discounts, excluding VAT. It shows up to five clients plus **Alți clienți**, and selecting a slice or legend entry opens that client's documents. Searching focuses the named slices while preserving the complete selected-depot denominator; the table and client CSV include each client's percentage. Clients with net negative sales are disclosed separately and excluded from the pie's positive total, so negative returns are never drawn as positive slices. When there are no positive sales, an explanation replaces the chart.
+- **Measure:** sales after discounts, sales, discounts or documents. The choice drives the trend and the gestiune share. The trend can be split by gestiune (top three).
+- **Documents** counts distinct `documentId` of sale entries. A document can have entries in several gestiuni, so the rows may add up to more than the total.
 
-Metric definitions: **documents** counts distinct `documentId`. **Margin %** is margin ÷ net, computed only over lines where Borg supplies a margin or cost; the KPI shows how much of net sales that covers. **Returns** are product lines with a negative value or quantity.
+**Accuracy:** the dashboard uses live accounting ledger entries. The saved September 2026 Piese sales report covers **September 1–29**, rather than the full month, and uses a different document set. Its CSV exports sum to 5,387,882.17 lei in sales and 227,735.06 lei in discounts; the supplied business figures are 5,387,882.07 and 227,735.00. These are report references, not expected totals for the live full-month ledger.
 
-**Products, discounts and services:** every row carries AGS's
-`businessValueKind`, and the dashboard computes all totals itself, in cents, from
-the authoritative `valoareNet`:
+Verified against live Borg on October 5, 2026, through the frontend loader, normalization and Piese warehouse filter (IDs 1, 2, 6, 9, 10, 14):
 
-- **Vânzări produse** (S) sums `sale` rows. Returns stay negative and reduce it.
-  Product values already include their line discounts and are never recomputed
-  from price, quantity or `discountProcent`.
-- **Discounturi** (D) is minus the sum of `discount` rows: granted discounts
-  (negative rows) minus reversals (positive rows), shown with D ÷ S. Rows flagged
-  `discountInclusInLinii` carry 0 and are not counted as separate transactions.
-- **Vânzări după discounturi** is S − D. `special` rows (services such as
-  Manoperă) and `unclassified` rows have their own tiles and filters and never
-  enter product sales; revenue-group breakdowns still include them.
+| Period | Sales (lei) | Discounts (lei) | Sales after discounts (lei) |
+| --- | ---: | ---: | ---: |
+| September 1–29, 2026 | 5,419,073.77 | 228,921.11 | 5,190,152.66 |
+| September 1–30, 2026 | 6,045,987.05 | 229,545.15 | 5,816,441.90 |
 
-The three headline cards ignore the line-kind filter so they always describe
-the same scope; every other filter applies to both periods. Clicking the
-discount card shows the discount lines (granted vs reversed) directly below.
-Allocated discount shares arrive in their revenue group (`revenueGroupId`) as
-separate rows with their own `miscareId`; the CSV export includes the line kind,
-`sourceMiscareId` and allocation. When Borg truncates a request, the totals are
-marked partial and the previous-period comparison is withheld. The dashboard
-shows exactly what the API returns: there are no balancing rows or hardcoded
-totals.
+Both full-month account responses reported `meta.truncated: false`, and the frontend ignored no entries. **Luna trecută**, when selected in October 2026, requests September 1–30. The heading identifies the accounting ledger as the source; no report snapshot or adjustment is substituted for live data. Live values can change when ledger entries are added or corrected.
 
-**Currency:** Borg returns lei. The **Lei / Euro** switch at the top right shows every amount, chart and CSV export in euro at an editable rate (default 5,10 lei per euro, `DEFAULT_EUR_RATE` in `src/lib/currency.ts`). Lei exports keep Borg's exact values; euro exports are rounded to cents.
+**Access:** the backend needs `sales:read`, a grant for Agritehnica and a role with access to all revenue groups (`salesGroups: null`). Ledger entries have no category, so roles limited to some groups get `403`; the page explains this instead of requesting data.
 
-Loaded lines stay in a bounded memory cache for the browser tab. Access is checked before cached data is reused and when the tab gains focus; **Reload** fetches fresh data. Logout and session refresh clear cached sales. Sales data is never written to browser storage; only the currency choice and rate are remembered there, per browser.
+**Currency:** Borg returns lei (`suma` is already converted for foreign-currency entries). The **Lei / Euro** switch at the top right shows every amount, chart and CSV export in euro at an editable rate (default 5,10 lei per euro, `DEFAULT_EUR_RATE` in `src/lib/currency.ts`). Euro exports are rounded to cents.
 
+Loaded entries stay in a bounded memory cache for the browser tab. Cached chunks are reused only while the user's role, permissions and entity grants (from `GET /api/me`) are unchanged, checked before reuse, again before a result is shown, and when the tab gains focus; **Reload** fetches fresh data. Logout and session refresh clear cached sales. Sales data is never written to browser storage; only the currency choice and rate are remembered there, per browser.
 
 ## Revenue groups and scoped roles
 
-Agritehnica sales are classified by the backend using persisted product-category
-rules: Utilaje → Utilaje; Irigații → Irigații; Alte materiale consumabile and
-Cheltuieli Diverse → Other; Manipulare → Manoperă; everything else → Piese.
-Green and BabyHub start with grouping disabled.
+The backend still classifies Borg's former product lines into revenue groups
+with persisted product-category rules (Utilaje, Irigații, Piese, Manoperă,
+Other), but the ledger that now backs the Sales page has no categories, so the
+dashboard no longer uses them (it has its own fixed split of gestiuni, described above). They remain in two places:
 
-Use **Administrare → Grupe de venit** to edit mappings. In **Roluri**, choose
-which groups a custom sales role may read, then assign that role and entity
-access in **Utilizatori**. The backend filters the response before any sales data
-reaches the browser. Existing roles retain their access during the upgrade;
-new roles need explicit group selections or **Toate grupele**.
+- **Administrare → Grupe de venit** edits the category rules per entity.
+- **Roluri** lets a custom sales role be limited to some groups, assigned in
+  **Utilizatori**. Such a role cannot read the ledger at all (`403`), so only
+  roles with **Toate grupele** see sales.
 
-Deploy AGS-backend first so its startup schema upgrade and grouped sales API are
-available before deploying this frontend. See [revenue group details](docs/revenue-groups.md)
-for the API contract, migration behavior, and access rules.
+See [revenue group details](docs/revenue-groups.md) for the API contract and
+access rules.
 
 ## Deploy on Render
 
@@ -120,16 +115,16 @@ for the API contract, migration behavior, and access rules.
 
 ```bash
 npm run lint
-npm test         # unit tests: date chunking, aggregation, filters, CSV, URL params, currency
+npm test         # unit tests: date chunking, ledger classification, grouping, loader, CSV, URL params, currency
 npm run build    # type-checks, then builds
 ```
 
 - `src/auth/`: MSAL sign-in (`msal.ts`) and the backend session (`AuthProvider.tsx`)
 - `src/api/`: fetch client, endpoint wrappers and backend types
 - `src/admin/`: shared users/roles state for the admin pages
-- `src/lib/sales.ts`: Borg line normalization, dimensions, metrics, grouping, time series
+- `src/lib/sales.ts`: ledger entry classification (707/709), metrics, gestiune grouping, time series
 - `src/lib/dates.ts`: presets, 30-day request chunking, previous period
 - `src/lib/currency.ts`: lei/euro preference, rate parsing and conversion
 - `src/lib/format.ts`: Romanian number, date and plural formatting
-- `src/pages/`: Sales (`sales/` holds its panels), Users, Roles and the sign-in/access screens
+- `src/pages/`: Sales (`sales/` holds its panels and loader), Users, Roles, Grupe de venit and the sign-in/access screens
 - `src/styles.css`: tokens (light and dark, Agritehnica greens) and layout

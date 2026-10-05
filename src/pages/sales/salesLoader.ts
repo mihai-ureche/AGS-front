@@ -1,21 +1,30 @@
 import { ApiError } from "../../api/client";
 import type { Api } from "../../api/client";
-import { getSales, getSalesAccess } from "../../api/endpoints";
-import type { SalesQuery, SalesResponse } from "../../api/types";
+import { getMe, getSales } from "../../api/endpoints";
+import type { SalesQuery } from "../../api/types";
 import { chunkRange, previousRange } from "../../lib/dates";
 import type { DateRange } from "../../lib/dates";
-import { normalizeLines } from "../../lib/sales";
-import type { SaleLine } from "../../lib/sales";
+import { normalizeEntries, SALES_ACCOUNTS } from "../../lib/sales";
+import type { SaleEntry } from "../../lib/sales";
 
-export const LINE_LIMIT = 50_000;
+export const ENTRY_LIMIT = 50_000;
 export interface Dataset {
   range: DateRange;
-  lines: SaleLine[];
-  /** Chunks where Borg hit its line limit; totals over them are partial. */
+  entries: SaleEntry[];
+  /** Ledger entries on 707/709 that are not in the totals; see `normalizeEntries`. */
+  ignored: number;
+  /** Chunks where Borg hit its entry limit; totals over them are partial. */
   truncated: DateRange[];
 }
 
-const cache = new Map<string, SalesResponse>();
+/** One account's entries for one chunk, already reduced to what the totals use. */
+interface Batch {
+  entries: SaleEntry[];
+  ignored: string[];
+  truncated: boolean;
+}
+
+const cache = new Map<string, Batch>();
 const requests = new Set<AbortController>();
 export function clearSalesCache() {
   for (const request of requests) request.abort();
@@ -39,6 +48,52 @@ function wait(ms: number, signal: AbortSignal) {
   });
 }
 
+/**
+ * What the user may read, as one string. The sales endpoint is checked by the
+ * backend on every request, but cached chunks skip it, so they are only reused
+ * while the user's role, permissions and entity grants are unchanged.
+ */
+async function accessVersion(api: Api, signal: AbortSignal) {
+  const me = await getMe(api, signal);
+  return JSON.stringify([
+    me.tenantId,
+    me.id,
+    me.role,
+    [...me.permissions].sort(),
+    me.salesGroups,
+    [...me.targetEntities].sort(),
+    me.isActive,
+  ]);
+}
+
+async function fetchBatch(
+  api: Api,
+  query: SalesQuery & { account: string },
+  signal: AbortSignal,
+): Promise<Batch> {
+  const request = () => getSales(api, { ...query, limit: ENTRY_LIMIT }, signal);
+  let response;
+  try {
+    response = await request();
+  } catch (error) {
+    if (!(error instanceof ApiError) || ![502, 503].includes(error.status))
+      throw error;
+    await wait(1500, signal);
+    response = await request();
+  }
+  // The backend forwards Borg's JSON unchecked, so a format change arrives as-is.
+  if (!Array.isArray(response?.entries))
+    throw new ApiError(
+      502,
+      "Borg a returnat vânzările într-un format neașteptat.",
+    );
+  return {
+    ...normalizeEntries(response.entries),
+    // Only an explicit false proves the period is complete.
+    truncated: response.meta?.truncated !== false,
+  };
+}
+
 export async function loadSales(
   api: Api,
   query: SalesQuery,
@@ -54,77 +109,64 @@ export async function loadSales(
   requests.add(controller);
   try {
     // Recheck access even when every chunk is cached.
-    const access = await getSalesAccess(api, query.targetEntity, signal);
+    const access = await accessVersion(api, signal);
     signal.throwIfAborted();
-    const checkVersion = (version: string) => {
-      if (version !== access.accessVersion) {
-        cache.clear();
-        throw new ApiError(
-          409,
-          "Accesul sau grupele de venit s-au schimbat. Reîncărcați datele.",
-        );
-      }
-    };
     const ranges = [
       { from: query.from, to: query.to },
       ...(compare ? [previousRange(query)] : []),
     ];
     const plans = ranges.map((range) => ({ range, chunks: chunkRange(range) }));
-    const total = plans.reduce((sum, plan) => sum + plan.chunks.length, 0);
+    const total =
+      plans.reduce((sum, plan) => sum + plan.chunks.length, 0) *
+      SALES_ACCOUNTS.length;
     let done = 0;
     onProgress({ done, total });
     const datasets: Dataset[] = [];
     for (const plan of plans) {
-      const rows: Record<string, unknown>[] = [];
+      // An entry touching both 707 and 709 comes back from both requests.
+      const entries = new Map<string, SaleEntry>();
+      const ignored = new Set<string>();
       const truncated: DateRange[] = [];
       for (const chunk of plan.chunks) {
-        signal.throwIfAborted();
-        const chunkQuery = { ...query, ...chunk };
-        const key = `${access.accessVersion}|${salesQueryKey(chunkQuery)}`;
-        let batch = cache.get(key);
-        if (!batch) {
-          try {
-            batch = await getSales(
-              api,
-              { ...chunkQuery, limit: LINE_LIMIT },
-              signal,
-            );
-          } catch (error) {
-            if (
-              !(error instanceof ApiError) ||
-              ![502, 503].includes(error.status)
-            )
-              throw error;
-            await wait(1500, signal);
-            batch = await getSales(
-              api,
-              { ...chunkQuery, limit: LINE_LIMIT },
-              signal,
-            );
-          }
+        let incomplete = false;
+        for (const account of SALES_ACCOUNTS) {
           signal.throwIfAborted();
-          checkVersion(batch.accessVersion);
-          cache.set(key, batch);
-          if (cache.size > 24) cache.delete(cache.keys().next().value!);
+          const chunkQuery = { ...query, ...chunk, account };
+          const key = `${access}|${salesQueryKey(chunkQuery)}`;
+          let batch = cache.get(key);
+          if (!batch) {
+            batch = await fetchBatch(api, chunkQuery, signal);
+            signal.throwIfAborted();
+            cache.set(key, batch);
+            if (cache.size > 48) cache.delete(cache.keys().next().value!);
+          }
+          if (batch.truncated) incomplete = true;
+          for (const entry of batch.entries) entries.set(entry.id, entry);
+          for (const id of batch.ignored) ignored.add(id);
+          onProgress({ done: ++done, total });
         }
-        if (batch.possiblyTruncated) truncated.push(chunk);
-        rows.push(...batch.lines);
-        onProgress({ done: ++done, total });
+        if (incomplete) truncated.push(chunk);
       }
       datasets.push({
         range: plan.range,
-        lines: normalizeLines(rows),
+        entries: [...entries.values()],
+        ignored: ignored.size,
         truncated,
       });
     }
-    // Do not publish a long load or comparison after access/config changed.
-    const latest = await getSalesAccess(api, query.targetEntity, signal);
+    // Do not publish a long load or comparison after access changed.
+    const latest = await accessVersion(api, signal);
     signal.throwIfAborted();
-    checkVersion(latest.accessVersion);
+    if (latest !== access) {
+      cache.clear();
+      throw new ApiError(
+        409,
+        "Accesul dumneavoastră s-a schimbat. Reîncărcați datele.",
+      );
+    }
     return {
       current: datasets[0]!,
       previous: datasets[1],
-      groups: access.groups,
       loadedAt: new Date(),
     };
   } catch (error) {

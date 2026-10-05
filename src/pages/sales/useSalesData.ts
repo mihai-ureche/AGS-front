@@ -1,18 +1,17 @@
 import { useEffect, useState } from "react";
 import { errorMessage, isAbort } from "../../api/client";
 import type { Api } from "../../api/client";
-import type { RevenueGroup, SalesQuery } from "../../api/types";
+import type { SalesQuery } from "../../api/types";
 import { loadSales, salesQueryKey } from "./salesLoader";
 import type { Dataset } from "./salesLoader";
 
-export { clearSalesCache, LINE_LIMIT } from "./salesLoader";
+export { clearSalesCache, ENTRY_LIMIT } from "./salesLoader";
 export type { Dataset } from "./salesLoader";
 
 export interface SalesState {
   status: "idle" | "loading" | "ready" | "error";
   current?: Dataset;
   previous?: Dataset;
-  groups?: RevenueGroup[];
   error?: string;
   progress?: { done: number; total: number };
   loadedAt?: Date;

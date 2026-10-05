@@ -1,5 +1,14 @@
 # Revenue groups
 
+> **Superseded for sales.** `GET /api/borg/sales` now returns Borg's accounting
+> ledger entries (`{ meta, entries }`), which carry no product category. The
+> grouped sales response, the `revenueGroupId` and `responseFormat` parameters,
+> `businessValueKind` and the **Tip venit** filter described below no longer exist,
+> and the Sales page no longer shows revenue groups. The configuration endpoints,
+> role scopes (`salesGroups`) and `GET /api/revenue-groups` still exist; a role
+> limited to some groups is refused by the ledger endpoint. See the Sales
+> dashboard section of the README.
+
 Implemented in AGS-backend and AGS-front. Deploy the backend before the frontend.
 The backend initializes the schema at startup; this change has been tested against
 an isolated PostgreSQL database, without applying it to the configured live database.

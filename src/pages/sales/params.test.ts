@@ -1,63 +1,123 @@
 import { describe, expect, it } from "vitest";
-import { readParams, validateCustomRange, writeParams } from "./params";
+import {
+  readParams,
+  toQuery,
+  validateCustomRange,
+  writeParams,
+} from "./params";
 
 describe("sales URL params", () => {
-  it("defaults to the first granted entity and the current month", () => {
-    const state = readParams(new URLSearchParams(), ["green", "babyhub"])!;
-    expect(state.entity).toBe("green");
+  it("defaults to the current month without comparison", () => {
+    const state = readParams(new URLSearchParams());
     expect(state.range).toBe("thisMonth");
     expect(state.compare).toBe(false);
+    expect(state.group).toBe("all");
+    expect(state.warehouse).toBe("all");
   });
 
-  it("ignores entities the user is not granted", () => {
+  it("reads and writes the gestiune group, ignoring unknown ones", () => {
+    for (const group of ["piese", "utilaje", "irigatii", "unassigned"]) {
+      const state = readParams(new URLSearchParams(`group=${group}`));
+      expect(state.group).toBe(group);
+      expect(writeParams(state).group).toBe(group);
+    }
+    expect(readParams(new URLSearchParams("group=nope")).group).toBe("all");
+    // Links from the first version of the groups.
+    expect(readParams(new URLSearchParams("group=main")).group).toBe("all");
     expect(
-      readParams(new URLSearchParams("entity=agritehnica"), ["babyhub"])!
-        .entity,
-    ).toBe("babyhub");
-    expect(readParams(new URLSearchParams(), [])).toBeNull();
+      writeParams(readParams(new URLSearchParams())).group,
+    ).toBeUndefined();
   });
 
-  it("round-trips a custom range and filters", () => {
-    const params = new URLSearchParams(
-      "entity=babyhub&range=custom&from=2026-07-01&to=2026-09-24&doc=BFD&gestiune=2&transfers=1&compare=1",
+  it("does not query again when only the group changes", () => {
+    const params = new URLSearchParams("range=last7");
+    expect(toQuery(readParams(params))).toEqual(
+      toQuery(readParams(new URLSearchParams("range=last7&group=piese"))),
     );
-    const state = readParams(params, ["babyhub"])!;
+  });
+
+  it("round-trips a custom range", () => {
+    const state = readParams(
+      new URLSearchParams(
+        "range=custom&from=2026-07-01&to=2026-09-24&compare=1",
+      ),
+    );
     expect(state).toMatchObject({
-      from: "2026-07-01",
-      to: "2026-09-24",
-      docType: "BFD",
-      gestiune: 2,
-      transfers: true,
-      compare: true,
-    });
-    expect(writeParams(state)).toEqual({
-      entity: "babyhub",
       range: "custom",
       from: "2026-07-01",
       to: "2026-09-24",
-      doc: "BFD",
-      gestiune: "2",
-      transfers: "1",
+      compare: true,
+    });
+    expect(writeParams(state)).toEqual({
+      range: "custom",
+      from: "2026-07-01",
+      to: "2026-09-24",
       compare: "1",
+      group: undefined,
+      warehouse: undefined,
     });
   });
 
-  it("accepts AIMS returns as a document type", () => {
-    const state = readParams(new URLSearchParams("doc=AIMS"), ["green"])!;
-    expect(state.docType).toBe("AIMS");
-    expect(writeParams(state).doc).toBe("AIMS");
-  });
-
-  it("falls back to the default preset for invalid custom ranges and filters", () => {
+  it("ignores parameters from the former product-line dashboard", () => {
     const state = readParams(
       new URLSearchParams(
-        "range=custom&from=2026-09-30&to=2026-09-01&doc=FC&gestiune=-1",
+        "entity=green&range=last7&doc=BFD&gestiune=2&transfers=1",
       ),
-      ["babyhub"],
-    )!;
+    );
+    expect(state.range).toBe("last7");
+    expect(writeParams(state)).toEqual({
+      range: "last7",
+      from: undefined,
+      to: undefined,
+      compare: undefined,
+      group: undefined,
+      warehouse: undefined,
+    });
+  });
+
+  it("always queries Agritehnica", () => {
+    expect(toQuery(readParams(new URLSearchParams("entity=green")))).toEqual({
+      targetEntity: "agritehnica",
+      from: expect.any(String),
+      to: expect.any(String),
+    });
+  });
+
+  it("round-trips depot filters without adding unsupported API filters", () => {
+    for (const warehouse of ["2", "none"]) {
+      const state = readParams(new URLSearchParams(`warehouse=${warehouse}`));
+      expect(writeParams(state).warehouse).toBe(warehouse);
+      expect(toQuery(state)).toEqual(
+        toQuery(readParams(new URLSearchParams())),
+      );
+    }
+    for (const warehouse of ["bad", "0", "-1", "1.5", "9007199254740992"])
+      expect(
+        readParams(new URLSearchParams(`warehouse=${warehouse}`)).warehouse,
+      ).toBe("all");
+  });
+
+  it("clears depot filters that conflict with the selected group", () => {
+    expect(
+      readParams(new URLSearchParams("group=piese&warehouse=2")).warehouse,
+    ).toBe(2);
+    expect(
+      readParams(new URLSearchParams("group=utilaje&warehouse=2")).warehouse,
+    ).toBe("all");
+    expect(
+      readParams(new URLSearchParams("group=piese&warehouse=none")).warehouse,
+    ).toBe("all");
+    expect(
+      readParams(new URLSearchParams("group=unassigned&warehouse=none"))
+        .warehouse,
+    ).toBe("none");
+  });
+
+  it("falls back to the default preset for invalid custom ranges", () => {
+    const state = readParams(
+      new URLSearchParams("range=custom&from=2026-09-30&to=2026-09-01"),
+    );
     expect(state.range).toBe("thisMonth");
-    expect(state.docType).toBeUndefined();
-    expect(state.gestiune).toBeUndefined();
   });
 
   it("validates custom ranges", () => {

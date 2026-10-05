@@ -1,594 +1,427 @@
 import { describe, expect, it } from "vitest";
-import { toCsv } from "./csv";
 import {
   composition,
   discountPct,
-  emptyRefine,
-  groupLines,
-  heatmap,
-  lineLabel,
-  marginPct,
-  normalizeLine,
-  normalizeLines,
-  refineLines,
+  groupChoices,
+  groupEntries,
+  inGroup,
+  normalizeEntries,
+  normalizeEntry,
   salesAfterDiscounts,
+  salesGroupOf,
+  salesGroups,
   summarize,
   timeSeries,
 } from "./sales";
-import type { LineKind } from "./sales";
+import type { GroupFilter } from "./sales";
 
-const base = {
-  documentId: 2157,
-  miscareId: 1,
-  tipDocument: "BFD",
-  canal: "retail",
-  serie: "BF",
-  numar: 10,
-  data: "2026-09-01T00:00:00",
-  oraDocument: "2026-09-01T14:23:00",
-  gestiuneId: 2,
-  depozit: "COPOU",
-  client: "Persoana fizica",
-  codProdus: "P-1",
-  produs: "Scutece 4",
-  grupa: "Scutece",
-  um: "buc",
-  cantitate: 2,
-  valoareNet: 100,
-  valoareTVA: 19,
-  valoareTotal: 119,
-  costTotal: 70,
-  marja: 30,
-  facturaSerie: null,
-  businessValueKind: "sale",
-};
-const ofKind = (rows: ReturnType<typeof normalizeLines>, kind: LineKind) =>
-  refineLines(rows, { ...emptyRefine, kind }).map((line) => line.id);
+// Shaped like live Borg ledger entries; every value is invented.
+let nextId = 1;
+const entry = (fields: Record<string, unknown> = {}) => ({
+  id: nextId++,
+  dataInregistrare: "2026-09-01T00:00:00.000Z",
+  dataDocument: "2026-09-01T00:00:00.000Z",
+  tipCompunere: 11,
+  tipDocument: "FC",
+  numarDocument: "BRAT.1.BR",
+  documentId: 100,
+  gestiuneId: 6,
+  depozit: "DEPOZIT BRAILA",
+  contDebit: "4111.G",
+  contCredit: "707.G.06",
+  suma: 100,
+  sumaValuta: 100,
+  curs: 1,
+  ...fields,
+});
+const sale = (fields?: Record<string, unknown>) => entry(fields);
+const discount707 = (suma: number, fields?: Record<string, unknown>) =>
+  entry({ contCredit: "707.Discount.06", suma, ...fields });
+const discount709 = (suma: number, fields?: Record<string, unknown>) =>
+  entry({
+    contDebit: "709.Discount.06",
+    contCredit: "4111.G",
+    suma,
+    ...fields,
+  });
+const normalize = (rows: Record<string, unknown>[]) =>
+  normalizeEntries(rows).entries;
 
-describe("normalizeLine", () => {
-  it("maps Borg fields and keeps nullable values", () => {
-    const line = normalizeLine(base, 0)!;
-    expect(line).toMatchObject({
-      id: "1",
-      documentId: "2157",
-      docType: "BFD",
+describe("normalizeEntry", () => {
+  it("reads a sale from a credit on 707 and names its gestiune", () => {
+    expect(normalizeEntry(sale({ id: 7, suma: 943.5 }))).toEqual({
+      id: "7",
+      documentId: "100",
+      docType: "FC",
+      number: "BRAT.1.BR",
       date: "2026-09-01",
-      hour: 14,
-      warehouse: "COPOU",
-      product: "Scutece 4",
-      productCode: "P-1",
-      quantity: 2,
-      net: 100,
-      vat: 19,
-      gross: 119,
-      cost: 70,
-      margin: 30,
-      invoice: null,
+      warehouseId: 6,
+      warehouse: "DEPOZIT BRAILA",
+      clientId: null,
+      client: "Fără client",
+      clientTaxId: null,
+      description: null,
+      account: "707.G.06",
+      kind: "sale",
+      amount: 943.5,
     });
   });
 
-  it("accepts numeric strings and derives missing gross and margin", () => {
-    const line = normalizeLine(
-      {
-        ...base,
-        valoareNet: "50.5",
-        valoareTotal: undefined,
-        valoareTVA: "9.5",
-        marja: undefined,
-        costTotal: "40",
-      },
-      0,
-    )!;
-    expect(line.net).toBe(50.5);
-    expect(line.gross).toBe(60);
-    expect(line.margin).toBe(10.5);
+  it("keeps storno negative and delivery notes on 418 as sales", () => {
+    expect(
+      normalizeEntry(sale({ tipDocument: "FCS", suma: -250.25 }))?.amount,
+    ).toBe(-250.25);
+    expect(
+      normalizeEntry(sale({ tipDocument: "AIM", contDebit: "418.G" }))?.kind,
+    ).toBe("sale");
   });
 
-  it("drops lines without a date or net value and tolerates missing times", () => {
-    expect(normalizeLine({ ...base, data: null }, 0)).toBeNull();
-    expect(normalizeLine({ ...base, valoareNet: "n/a" }, 0)).toBeNull();
-    expect(normalizeLine({ ...base, oraDocument: null }, 0)!.hour).toBeNull();
+  it("turns the negative 707.Discount credit into a positive discount", () => {
+    expect(normalizeEntry(discount707(-120.5))).toMatchObject({
+      kind: "discount",
+      account: "707.Discount.06",
+      amount: 120.5,
+    });
+    // A positive amount there reverses a discount.
+    expect(normalizeEntry(discount707(20))?.amount).toBe(-20);
+  });
+
+  it("reads a debit on 709 as a discount", () => {
+    expect(normalizeEntry(discount709(615.88))).toMatchObject({
+      kind: "discount",
+      account: "709.Discount.06",
+      amount: 615.88,
+    });
+  });
+
+  it("does not match other revenue, VAT, cost or the document total line", () => {
+    for (const fields of [
+      { contCredit: "704.G.06" },
+      { contCredit: "7588.G.06" },
+      { contCredit: "4427" },
+      { contDebit: "607.G.06", contCredit: "371.G.06" },
+      // The total line of a sale document has no credit account.
+      { tipCompunere: 10, contCredit: null, suma: 565.55 },
+    ])
+      expect(normalizeEntry(entry(fields))).toBeNull();
+  });
+
+  it("uses the amount in lei and the posting date", () => {
+    const foreign = normalizeEntry(
+      sale({
+        suma: 92.16,
+        sumaValuta: 17.4592,
+        curs: 5.2788,
+        dataInregistrare: "2026-09-10T00:00:00.000Z",
+        dataDocument: "2026-09-12T00:00:00.000Z",
+      }),
+    );
+    expect(foreign).toMatchObject({ amount: 92.16, date: "2026-09-10" });
+  });
+
+  it("falls back to the document date and to named placeholders", () => {
+    const loose = normalizeEntry(
+      sale({
+        dataInregistrare: null,
+        gestiuneId: null,
+        depozit: null,
+        documentId: null,
+        tipDocument: null,
+      }),
+    );
+    expect(loose).toMatchObject({
+      date: "2026-09-01",
+      warehouseId: null,
+      warehouse: "Fără gestiune",
+      documentId: null,
+      docType: "—",
+    });
+    expect(normalizeEntry(sale({ depozit: null }))?.warehouse).toBe(
+      "Gestiunea 6",
+    );
+  });
+
+  it("accepts numeric strings", () => {
+    expect(
+      normalizeEntry(sale({ suma: "12.5", gestiuneId: "2" })),
+    ).toMatchObject({ amount: 12.5, warehouseId: 2 });
   });
 });
 
-const lines = normalizeLines([
-  base,
-  {
-    ...base,
-    miscareId: 2,
-    codProdus: "P-2",
-    produs: "Lapte praf",
-    grupa: "Hrana",
-    valoareNet: 300,
-    valoareTotal: 357,
-    marja: null,
-    costTotal: null,
-  },
-  {
-    ...base,
-    miscareId: 3,
-    documentId: 2158,
-    gestiuneId: 3,
-    depozit: "STOC",
-    tipDocument: "AIM",
-    data: "2026-09-02",
-    oraDocument: "2026-09-02T09:05:00",
-    valoareNet: 200,
-    valoareTotal: 238,
-    marja: 50,
-  },
-  // A return on the first document.
-  {
-    ...base,
-    miscareId: 4,
-    cantitate: -1,
-    valoareNet: -50,
-    valoareTotal: -59.5,
-    marja: -15,
-  },
-]);
+describe("normalizeEntries", () => {
+  it("reports entries that touch 707/709 but cannot count", () => {
+    const closing = entry({
+      id: 900,
+      contDebit: "707.G.06",
+      contCredit: "121",
+      suma: 5000,
+    });
+    const reversal = entry({
+      id: 901,
+      contDebit: "4111.G",
+      contCredit: "709.G",
+    });
+    const noDate = sale({
+      id: 902,
+      dataInregistrare: null,
+      dataDocument: null,
+    });
+    const noAmount = sale({ id: 903, suma: null });
+    const result = normalizeEntries([
+      sale({ id: 1 }),
+      closing,
+      reversal,
+      noDate,
+      noAmount,
+      // Not related to sales at all: neither counted nor reported.
+      entry({ id: 904, contDebit: "401.G", contCredit: "5121" }),
+    ]);
+    expect(result.entries.map((item) => item.id)).toEqual(["1"]);
+    expect(result.ignored).toEqual(["900", "901", "902", "903"]);
+  });
+});
 
 describe("metrics", () => {
-  it("sums values, counts distinct documents and tracks returns", () => {
-    const totals = summarize(lines);
-    expect(totals.net).toBe(550);
-    expect(totals.documents).toBe(2);
-    expect(totals.lines).toBe(4);
-    expect(totals.returns).toBe(-50);
-    expect(totals.returnLines).toBe(1);
+  it("sums sales, discounts and distinct documents in cents", () => {
+    const entries = normalize([
+      sale({ suma: 0.1, documentId: 1 }),
+      sale({ suma: 0.2, documentId: 1 }),
+      sale({ suma: 100, documentId: 2 }),
+      discount707(-10),
+      discount709(5),
+    ]);
+    const metrics = summarize(entries);
+    // 0.1 + 0.2 is exact in cents.
+    expect(metrics.sales).toBe(100.3);
+    expect(metrics.discounts).toBe(15);
+    expect(metrics.documents).toBe(2);
+    expect(metrics.entries).toBe(5);
+    expect(salesAfterDiscounts(metrics)).toBe(85.3);
+    expect(discountPct(metrics)).toBeCloseTo((15 / 100.3) * 100, 6);
   });
 
-  it("computes margin % only over lines with a known margin", () => {
-    const totals = summarize(lines);
-    expect(totals.margin).toBe(65);
-    expect(totals.marginBase).toBe(250);
-    expect(marginPct(totals)).toBe(26);
-    expect(marginPct(summarize([]))).toBeNull();
+  it("keeps storno inside sales and reports it separately", () => {
+    const metrics = summarize(
+      normalize([
+        sale({ suma: 1000, documentId: 1 }),
+        sale({ suma: -200, tipDocument: "FCS", documentId: 2 }),
+      ]),
+    );
+    expect(metrics).toMatchObject({
+      sales: 800,
+      returns: -200,
+      returnEntries: 1,
+      documents: 2,
+    });
+  });
+
+  it("lets a discount reversal reduce the discount", () => {
+    const metrics = summarize(normalize([discount707(-100), discount707(30)]));
+    expect(metrics.discounts).toBe(70);
+  });
+
+  it("has no discount percentage without sales", () => {
+    expect(discountPct(summarize(normalize([discount709(10)])))).toBeNull();
+    expect(discountPct(summarize([]))).toBeNull();
   });
 });
 
-describe("grouping", () => {
-  it("groups by a dimension, largest first, with nested groups", () => {
-    const groups = groupLines(lines, "category", "net", "warehouse");
-    expect(groups.map((group) => [group.key, group.metrics.net])).toEqual([
-      ["Hrana", 300],
-      ["Scutece", 250],
+describe("grouping by gestiune", () => {
+  const entries = normalize([
+    sale({ suma: 100, gestiuneId: 2, depozit: "DEPOZIT IASI" }),
+    sale({ suma: 500, gestiuneId: 6, depozit: "DEPOZIT BRAILA" }),
+    sale({ suma: 300, gestiuneId: 6, depozit: "DEPOZIT BRAILA" }),
+    discount709(50, { gestiuneId: 2, depozit: "DEPOZIT IASI" }),
+    sale({ suma: 200, gestiuneId: null, depozit: null }),
+  ]);
+
+  it("groups by gestiune ID, largest first, with a row for entries without one", () => {
+    const groups = groupEntries(entries, "warehouse", "sales");
+    expect(groups.map((group) => [group.name, group.metrics.sales])).toEqual([
+      ["DEPOZIT BRAILA", 800],
+      ["Fără gestiune", 200],
+      ["DEPOZIT IASI", 100],
     ]);
-    expect(
-      groups[1]!.children!.map((child) => [
-        child.key,
-        child.name,
-        child.metrics.net,
-      ]),
-    ).toEqual([
-      ["id:3", "STOC", 200],
-      ["id:2", "COPOU", 50],
-    ]);
+    expect(groups.map((group) => group.key)).toEqual(["id:6", "none", "id:2"]);
   });
 
-  it("groups clients by Borg client ID, so namesakes stay apart", () => {
-    const clients = normalizeLines([
-      {
-        ...base,
-        miscareId: 10,
-        clientId: 7,
-        client: "Agro SRL",
-        valoareNet: 10,
-      },
-      {
-        ...base,
-        miscareId: 11,
-        clientId: 7,
-        client: "Agro SRL",
-        valoareNet: 5,
-      },
-      {
-        ...base,
-        miscareId: 12,
-        clientId: 8,
-        client: "Agro SRL",
-        clientCodFiscal: "RO123",
-        valoareNet: 40,
-      },
-    ]);
+  it("ranks by the chosen measure", () => {
     expect(
-      groupLines(clients, "client").map((group) => [
-        group.key,
-        group.name,
-        group.metrics.net,
-      ]),
-    ).toEqual([
-      ["id:8", "Agro SRL · RO123", 40],
-      ["id:7", "Agro SRL", 15],
-    ]);
+      groupEntries(entries, "warehouse", "afterDiscounts").map(
+        (group) => group.name,
+      ),
+    ).toEqual(["DEPOZIT BRAILA", "Fără gestiune", "DEPOZIT IASI"]);
     expect(
-      refineLines(clients, {
-        search: "",
-        kind: "all",
-        filters: { client: ["id:7"] },
-      }).map((line) => line.id),
-    ).toEqual(["10", "11"]);
+      groupEntries(entries, "warehouse", "discounts").map(
+        (group) => group.name,
+      ),
+    ).toEqual(["DEPOZIT IASI", "DEPOZIT BRAILA", "Fără gestiune"]);
   });
 
-  it("keeps time dimensions in calendar order", () => {
-    expect(groupLines(lines, "day").map((group) => group.key)).toEqual([
-      "2026-09-01",
-      "2026-09-02",
-    ]);
+  it("splits groups that sum to the overall figures", () => {
+    const groups = groupEntries(entries, "warehouse");
+    expect(groups.reduce((sum, group) => sum + group.metrics.sales, 0)).toBe(
+      summarize(entries).sales,
+    );
   });
 });
 
 describe("composition", () => {
-  const gestiune = (id: number, net: number, marja: number | null = null) => ({
-    ...base,
-    miscareId: id * 10 + net,
-    gestiuneId: id,
-    depozit: `G${id}`,
-    valoareNet: net,
-    marja,
-  });
+  const many = (values: [number, number][]) =>
+    normalize(
+      values.map(([gestiuneId, suma]) =>
+        sale({ gestiuneId, depozit: `G${gestiuneId}`, suma }),
+      ),
+    );
 
   it("gives each gestiune its share of the total", () => {
-    const { total, rows, segments } = composition(lines, "warehouse", "net");
-    expect(total).toBe(550);
-    expect(rows.map((row) => [row.name, row.value, row.slot])).toEqual([
-      ["COPOU", 350, 0],
-      ["STOC", 200, 1],
+    const { total, rows, segments } = composition(
+      many([
+        [1, 300],
+        [2, 100],
+      ]),
+      "warehouse",
+      "sales",
+    );
+    expect(total).toBe(400);
+    expect(rows.map((row) => [row.name, row.share, row.slot])).toEqual([
+      ["G1", 75, 0],
+      ["G2", 25, 1],
     ]);
-    expect(rows[0]!.share).toBeCloseTo(63.64, 2);
-    expect(segments.map((segment) => segment.name)).toEqual(["COPOU", "STOC"]);
+    expect(segments.map((segment) => segment.key)).toEqual(["id:1", "id:2"]);
   });
 
   it("folds everything past the third gestiune into one segment", () => {
-    const five = normalizeLines(
-      [50, 40, 30, 20, 10].map((net, index) => gestiune(index + 1, net)),
+    const { segments, folded } = composition(
+      many([
+        [1, 400],
+        [2, 300],
+        [3, 200],
+        [4, 60],
+        [5, 40],
+      ]),
+      "warehouse",
+      "sales",
     );
-    const { segments, folded } = composition(five, "warehouse", "net");
-    expect(segments.map((segment) => [segment.key, segment.value])).toEqual([
-      ["id:1", 50],
-      ["id:2", 40],
-      ["id:3", 30],
-      ["__other", 30],
+    expect(segments.map((segment) => segment.name)).toEqual([
+      "G1",
+      "G2",
+      "G3",
+      "Altele",
     ]);
+    expect(segments[3]!.value).toBe(100);
     expect(folded).toBe(2);
   });
 
-  it("keeps colors on the gestiune, not its rank, while refining", () => {
-    const all = normalizeLines([gestiune(1, 500), gestiune(2, 300)]);
-    const onlySecond = all.filter((line) => line.warehouseId === 2);
-    const { rows } = composition(onlySecond, "warehouse", "net", all);
-    expect(rows.map((row) => [row.key, row.slot])).toEqual([["id:2", 1]]);
-  });
-
   it("drops the segments when a part is negative", () => {
-    const mixed = normalizeLines([gestiune(1, 100, 30), gestiune(2, 50, -40)]);
-    const { rows, segments, total } = composition(mixed, "warehouse", "margin");
-    expect(total).toBe(-10);
-    expect(rows.every((row) => row.share === null)).toBe(true);
+    const { segments, rows } = composition(
+      many([
+        [1, 300],
+        [2, -50],
+      ]),
+      "warehouse",
+      "sales",
+    );
     expect(segments).toEqual([]);
-  });
-});
-
-describe("refineLines", () => {
-  it("filters by dimension values, line kind and search terms", () => {
-    expect(
-      refineLines(lines, { search: "", kind: "returns", filters: {} }).map(
-        (line) => line.id,
-      ),
-    ).toEqual(["4"]);
-    expect(
-      refineLines(lines, {
-        search: "",
-        kind: "sales",
-        filters: { warehouse: ["id:3"] },
-      }).map((line) => line.id),
-    ).toEqual(["3"]);
-    expect(
-      refineLines(lines, { search: "lapte P-2", kind: "all", filters: {} }).map(
-        (line) => line.id,
-      ),
-    ).toEqual(["2"]);
+    expect(rows).toHaveLength(2);
   });
 });
 
 describe("timeSeries", () => {
   const range = { from: "2026-09-01", to: "2026-09-03" };
+  const entries = normalize([
+    sale({ suma: 100, gestiuneId: 6, depozit: "BRAILA" }),
+    sale({ suma: 50, gestiuneId: 2, depozit: "IASI" }),
+    sale({
+      suma: 200,
+      gestiuneId: 6,
+      depozit: "BRAILA",
+      dataInregistrare: "2026-09-02T00:00:00.000Z",
+    }),
+    discount709(20, { dataInregistrare: "2026-09-02T00:00:00.000Z" }),
+  ]);
 
   it("plots every day in the range, including empty ones", () => {
     expect(
-      timeSeries(lines, range, "net").map((point) => [point.key, point.value]),
+      timeSeries(entries, range, "sales").map((point) => [
+        point.key,
+        point.value,
+      ]),
     ).toEqual([
-      ["2026-09-01", 350],
+      ["2026-09-01", 150],
       ["2026-09-02", 200],
       ["2026-09-03", 0],
     ]);
+    expect(
+      timeSeries(entries, range, "afterDiscounts").map((point) => point.value),
+    ).toEqual([150, 180, 0]);
   });
 
-  it("splits into the chosen series and folds the rest into other", () => {
-    const [first] = timeSeries(lines, range, "net", {
-      split: "category",
-      splitKeys: ["Hrana"],
+  it("splits by gestiune and folds the rest into other", () => {
+    const [first] = timeSeries(entries, range, "sales", {
+      split: "warehouse",
+      splitKeys: ["id:6"],
     });
-    expect(first).toMatchObject({ "s:Hrana": 300, other: 50 });
+    expect(first).toMatchObject({ "s:id:6": 100, other: 50 });
   });
 
   it("aligns the previous period by position", () => {
     const previous = {
-      lines: normalizeLines([{ ...base, data: "2026-08-29" }]),
+      entries: normalize([
+        sale({ dataInregistrare: "2026-08-29T00:00:00.000Z", suma: 70 }),
+      ]),
       range: { from: "2026-08-29", to: "2026-08-31" },
     };
-    const points = timeSeries(lines, range, "net", { previous });
-    expect(points.map((point) => point.previous)).toEqual([100, 0, 0]);
+    const points = timeSeries(entries, range, "sales", { previous });
+    expect(points.map((point) => point.previous)).toEqual([70, 0, 0]);
   });
 });
 
-describe("heatmap", () => {
-  it("places values by weekday and hour", () => {
-    const map = heatmap(lines, "net");
-    // 2026-09-01 is a Tuesday (index 1).
-    expect(map.values[1]![14]).toBe(350);
-    expect(map.values[2]![9]).toBe(200);
-    expect(map.distinctHours).toBe(2);
-  });
-});
+describe("gestiune groups", () => {
+  const ids = {
+    piese: [1, 2, 6, 9, 10, 14],
+    utilaje: [8, 16, 17, 18, 19, 20],
+    irigatii: [15],
+    unassigned: [3, 4, 5, 7, 11, 13, 99, null],
+  };
+  const entries = normalize(
+    Object.values(ids)
+      .flat()
+      .map((gestiuneId) =>
+        sale({ gestiuneId, depozit: gestiuneId && `G${gestiuneId}`, suma: 10 }),
+      ),
+  );
+  const idsOf = (group: GroupFilter) =>
+    inGroup(entries, group).map((item) => item.warehouseId);
 
-describe("toCsv", () => {
-  it("quotes text and neutralizes spreadsheet formulas", () => {
-    const csv = toCsv([
-      ["Product", "Net"],
-      ['=HYPERLINK("bad")', -12.5],
-      ["Desk, large", null],
-    ]);
-    expect(csv.split("\r\n")).toEqual([
-      '"Product","Net"',
-      '"\'=HYPERLINK(""bad"")",-12.5',
-      '"Desk, large",',
-    ]);
-  });
-});
-
-describe("revenue groups", () => {
-  it("uses the backend classification for grouping, filtering and returns", () => {
-    const rows = normalizeLines([
-      {
-        ...base,
-        miscareId: 1,
-        grupa: "Utilaje",
-        revenueGroupId: "utilaje",
-        revenueGroupName: "Utilaje",
-        valoareNet: 100,
-      },
-      {
-        ...base,
-        miscareId: 2,
-        grupa: "Manipulare",
-        revenueGroupId: "manopera",
-        revenueGroupName: "Manoperă",
-        valoareNet: 20,
-      },
-      {
-        ...base,
-        miscareId: 3,
-        grupa: "Utilaje",
-        revenueGroupId: "utilaje",
-        revenueGroupName: "Utilaje",
-        valoareNet: -10,
-      },
-    ]);
-    expect(
-      groupLines(rows, "revenueGroup", "net").map((group) => [
-        group.key,
-        group.metrics.net,
-      ]),
-    ).toEqual([
-      ["utilaje", 90],
-      ["manopera", 20],
-    ]);
-    expect(summarize(rows).net).toBe(110);
-    expect(
-      refineLines(rows, {
-        search: "",
-        kind: "all",
-        filters: { revenueGroup: ["manopera"] },
-      }).map((line) => line.id),
-    ).toEqual(["2"]);
-    expect(
-      normalizeLine({ ...base, grupa: "Utilaje" }, 0)?.revenueGroupId,
-    ).toBeNull();
-  });
-});
-
-describe("product sales and separate discounts", () => {
-  // The supplied September 1–29 Piese CSV snapshot. Test expectations only:
-  // production always shows what the API returns.
-  const september = normalizeLines([
-    { ...base, miscareId: "1", tipDocument: "AIM", valoareNet: 5916626.47 },
-    {
-      ...base,
-      miscareId: "2",
-      documentId: 2,
-      tipDocument: "AIMS",
-      cantitate: -1,
-      valoareNet: -528744.3,
-    },
-    {
-      ...base,
-      miscareId: "3",
-      valoareNet: -229041.31,
-      businessValueKind: "discount",
-      discountInclusInLinii: false,
-    },
-    {
-      ...base,
-      miscareId: "4",
-      documentId: 2,
-      tipDocument: "AIMS",
-      valoareNet: 1306.25,
-      businessValueKind: "discount",
-      discountInclusInLinii: false,
-    },
-  ]);
-
-  it("matches the September snapshot to the cent", () => {
-    const metrics = summarize(september);
-    expect(metrics.productSales).toBe(5387882.17);
-    expect(metrics.discounts).toBe(227735.06);
-    expect(salesAfterDiscounts(metrics)).toBe(5160147.11);
-    expect(metrics.discountsGranted).toBe(229041.31);
-    expect(metrics.discountsReversed).toBe(1306.25);
-    expect(metrics.discountTransactions).toBe(2);
-    expect(discountPct(metrics)).toBeCloseTo((227735.06 / 5387882.17) * 100, 6);
-    expect(metrics.net).toBe(5160147.11);
+  it("puts each listed gestiune in its group", () => {
+    expect(idsOf("piese")).toEqual(ids.piese);
+    expect(idsOf("utilaje")).toEqual(ids.utilaje);
+    expect(idsOf("irigatii")).toEqual(ids.irigatii);
   });
 
-  it("keeps product returns negative inside product sales", () => {
-    const metrics = summarize(september);
-    expect(metrics.returns).toBe(-528744.3);
-    expect(metrics.returnLines).toBe(1);
-    expect(ofKind(september, "returns")).toEqual(["2"]);
-    expect(ofKind(september, "sales")).toEqual(["1"]);
-    // A discount reversal is not a product return.
-    expect(ofKind(september, "discounts")).toEqual(["3", "4"]);
+  it("leaves unlisted gestiuni and entries without one unassigned", () => {
+    expect(idsOf("unassigned")).toEqual(ids.unassigned);
+    expect(salesGroupOf({ warehouseId: null })).toBe("unassigned");
+    expect(salesGroupOf({ warehouseId: 99 })).toBe("unassigned");
   });
 
-  it("lets discount reversals reduce the discount instead of adding to it", () => {
-    const onlyReversal = summarize(september.filter((line) => line.id === "4"));
-    expect(onlyReversal.discounts).toBe(-1306.25);
-    expect(onlyReversal.discountsGranted).toBe(0);
-    expect(lineLabel(september[2]!)).toBe("Discount acordat");
-    expect(lineLabel(september[3]!)).toBe("Discount stornat");
-  });
-
-  it("adds sums in cents, without floating-point drift", () => {
-    const cents = normalizeLines(
-      [0.1, 0.2, 0.7].map((net, index) => ({
-        ...base,
-        miscareId: index,
-        valoareNet: net,
-      })),
+  it("lists every gestiune in at most one group", () => {
+    const listed = salesGroups.flatMap((group) =>
+      group.warehouses.map(([id]) => id),
     );
-    expect(summarize(cents).productSales).toBe(1);
+    expect(new Set(listed).size).toBe(listed.length);
   });
 
-  it("does not count discounts already included in product prices again", () => {
-    const rows = normalizeLines([
-      { ...base, miscareId: "p", cantitate: 1, valoareNet: 90 },
-      {
-        ...base,
-        miscareId: "d",
-        valoareNet: 0,
-        valoareSalvata: 10,
-        businessValueKind: "discount",
-        discountInclusInLinii: true,
-      },
-    ]);
-    const metrics = summarize(rows);
-    expect(metrics.productSales).toBe(90);
-    expect(metrics.discounts).toBe(0);
-    expect(metrics.discountTransactions).toBe(0);
-    expect(salesAfterDiscounts(metrics)).toBe(90);
-    expect(ofKind(rows, "discounts")).toEqual(["d"]);
-    expect(lineLabel(rows[1]!)).toBe("Discount inclus în preț");
-    expect(rows[1]!.discountInLines).toBe(true);
-    expect(normalizeLine(base, 0)!.discountInLines).toBeNull();
-  });
-
-  it("keeps services and unknown kinds out of product sales", () => {
-    const rows = normalizeLines([
-      { ...base, miscareId: "p", valoareNet: 100 },
-      {
-        ...base,
-        miscareId: "s",
-        grupa: "Manipulare",
-        revenueGroupId: "manopera",
-        revenueGroupName: "Manoperă",
-        valoareNet: 40,
-        businessValueKind: "special",
-      },
-      { ...base, miscareId: "u", valoareNet: 7, businessValueKind: "new-kind" },
-      { ...base, miscareId: "m", valoareNet: 3, businessValueKind: undefined },
-    ]);
-    expect(rows.map((line) => line.kind)).toEqual([
-      "sale",
-      "special",
-      "unclassified",
-      "unclassified",
-    ]);
-    const metrics = summarize(rows);
-    expect(metrics.productSales).toBe(100);
-    expect(salesAfterDiscounts(metrics)).toBe(100);
-    expect(metrics.special).toBe(40);
-    expect(metrics.specialLines).toBe(1);
-    expect(metrics.unclassified).toBe(10);
-    expect(metrics.unclassifiedLines).toBe(2);
-    expect(metrics.net).toBe(150);
-    expect(ofKind(rows, "special")).toEqual(["s"]);
-    expect(ofKind(rows, "unclassified")).toEqual(["u", "m"]);
-    expect(ofKind(rows, "sales")).toEqual(["p"]);
-    // Manoperă still reports its service revenue by revenue group.
-    expect(
-      groupLines(rows, "revenueGroup").find((group) => group.key === "manopera")
-        ?.metrics.net,
-    ).toBe(40);
-  });
-
-  it("keeps allocated discount shares as rows in AGS's revenue groups", () => {
-    const share = {
-      ...base,
-      grupa: "Discounturi",
-      businessValueKind: "discount",
-      discountInclusInLinii: false,
-      sourceMiscareId: 900,
-    };
-    const rows = normalizeLines([
-      { ...base, miscareId: "1", revenueGroupId: "piese", valoareNet: 1000 },
-      { ...base, miscareId: "2", revenueGroupId: "utilaje", valoareNet: 3000 },
-      {
-        ...share,
-        miscareId: "900:piese",
-        revenueGroupId: "piese",
-        revenueGroupName: "Piese",
-        valoareNet: -25,
-        discountAllocation: { share: 0.25, basis: "valoareNet" },
-      },
-      {
-        ...share,
-        miscareId: "900:utilaje",
-        revenueGroupId: "utilaje",
-        revenueGroupName: "Utilaje",
-        valoareNet: -75,
-        discountAllocation: { share: 0.75, basis: "valoareNet" },
-      },
-    ]);
-    expect(rows.map((line) => line.id)).toEqual([
-      "1",
-      "2",
-      "900:piese",
-      "900:utilaje",
-    ]);
-    expect(rows[2]).toMatchObject({
-      sourceMovementId: "900",
-      allocation: "share: 0.25; basis: valoareNet",
-    });
-    const metrics = summarize(rows);
-    expect(metrics.discounts).toBe(100);
-    expect(metrics.discountTransactions).toBe(1);
-    expect(
-      groupLines(rows, "revenueGroup").map((group) => [
-        group.key,
-        group.metrics.productSales,
-        group.metrics.discounts,
-      ]),
-    ).toEqual([
-      ["utilaje", 3000, 75],
-      ["piese", 1000, 25],
-    ]);
-    expect(
-      refineLines(rows, {
-        ...emptyRefine,
-        kind: "discounts",
-        filters: { revenueGroup: ["piese"] },
-      }).map((line) => line.id),
-    ).toEqual(["900:piese"]);
+  it("splits the sales exactly, with nothing counted in two groups or none", () => {
+    const total = summarize(entries);
+    const parts = groupChoices.map((group) =>
+      summarize(inGroup(entries, group.key)),
+    );
+    expect(parts.reduce((sum, part) => sum + part.sales, 0)).toBe(total.sales);
+    expect(parts.reduce((sum, part) => sum + part.entries, 0)).toBe(
+      total.entries,
+    );
+    expect(inGroup(entries, "all")).toBe(entries);
   });
 });

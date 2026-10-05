@@ -67,36 +67,34 @@ export interface RevenueConfiguration {
   rules: RevenueRule[];
   groups: RevenueGroup[];
 }
-export interface SalesAccess {
-  groups: RevenueGroup[];
-  accessVersion: string;
+
+/** `meta` of GET /api/borg/sales, as Borg reports it. */
+export interface SalesMeta {
+  targetEntity: TargetEntity;
+  from: string;
+  to: string;
+  account: string | null;
+  docType: string | null;
+  limit: number;
+  entries: number;
+  /** Exact: Borg read one entry beyond `limit`. */
+  truncated: boolean;
 }
-/**
- * AGS's business classification of a sales row. Products are "sale" (returns
- * included, negative); separate commercial discounts are "discount".
- */
-export type BusinessValueKind =
-  "sale" | "discount" | "special" | "unclassified";
 
 /**
- * GET /api/borg/sales?responseFormat=grouped. Each row carries authoritative
- * amounts (valoareNet, valoareTVA, valoareTotal, costTotal, marja),
- * businessValueKind, revenueGroupId/Name and discountInclusInLinii; allocated
- * discount shares also carry discountAllocation and sourceMiscareId.
+ * GET /api/borg/sales: Borg's accounting ledger entries, forwarded unchanged.
+ * There are no product lines or categories. Clients are the third parties on
+ * the debit side of 707 entries and the credit side of 709 entries. Amounts are
+ * `suma` in lei, posted between `contDebit` and `contCredit`. Fields are read defensively in
+ * lib/sales.ts because the backend does not validate Borg's format.
  */
 export interface SalesResponse {
-  lines: Record<string, unknown>[];
-  possiblyTruncated: boolean;
-  accessVersion: string;
+  meta?: Partial<SalesMeta>;
+  entries?: Record<string, unknown>[];
 }
-
-export type DocType = "BFD" | "AIM" | "AIMS";
 
 export interface SalesQuery {
   targetEntity: TargetEntity;
   from: string;
   to: string;
-  docType?: DocType;
-  gestiune?: number;
-  includeTransfers?: boolean;
 }
