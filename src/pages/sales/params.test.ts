@@ -15,10 +15,14 @@ describe("sales URL params", () => {
   });
 
   it("reads and writes the gestiune group, ignoring unknown ones", () => {
-    const state = readParams(new URLSearchParams("group=rest"));
-    expect(state.group).toBe("rest");
-    expect(writeParams(state).group).toBe("rest");
+    for (const group of ["piese", "utilaje", "irigatii", "unassigned"]) {
+      const state = readParams(new URLSearchParams(`group=${group}`));
+      expect(state.group).toBe(group);
+      expect(writeParams(state).group).toBe(group);
+    }
     expect(readParams(new URLSearchParams("group=nope")).group).toBe("all");
+    // Links from the first version of the groups.
+    expect(readParams(new URLSearchParams("group=main")).group).toBe("all");
     expect(
       writeParams(readParams(new URLSearchParams())).group,
     ).toBeUndefined();
@@ -27,7 +31,7 @@ describe("sales URL params", () => {
   it("does not query again when only the group changes", () => {
     const params = new URLSearchParams("range=last7");
     expect(toQuery(readParams(params))).toEqual(
-      toQuery(readParams(new URLSearchParams("range=last7&group=main"))),
+      toQuery(readParams(new URLSearchParams("range=last7&group=piese"))),
     );
   });
 

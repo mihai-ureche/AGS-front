@@ -7,7 +7,7 @@ import {
   presetRange,
 } from "../../lib/dates";
 import type { PresetKey } from "../../lib/dates";
-import { SALES_ENTITY, salesGroups } from "../../lib/sales";
+import { groupChoices, SALES_ENTITY } from "../../lib/sales";
 import type { GroupFilter } from "../../lib/sales";
 
 /** Query settings; kept in the URL so views can be bookmarked and shared. */
@@ -49,7 +49,7 @@ export function readParams(params: URLSearchParams): SalesParams {
     range,
     ...dates,
     compare: params.get("compare") === "1",
-    group: salesGroups.find((item) => item.key === group)?.key ?? "all",
+    group: groupChoices.find((item) => item.key === group)?.key ?? "all",
   };
 }
 

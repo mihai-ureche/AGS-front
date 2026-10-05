@@ -7,29 +7,63 @@ import { locale } from "./format";
 export const SALES_ENTITY: TargetEntity = "agritehnica";
 
 /**
- * The gestiuni are split into two fixed groups for reporting. Group 1 is named
- * by gestiune ID; every other gestiune, and any entry without one, is the rest.
- * Editing the split means editing this list.
+ * Reporting groups of gestiuni. List each gestiune, by ID, in at most one group
+ * (the names are for reading only; entries are matched by ID). A gestiune in no
+ * list, and an entry with no gestiune, is "Nealocate", so the groups always add
+ * up to the total and a new gestiune shows up instead of being filed under a
+ * group by default. Editing the split means editing these lists.
  */
-export type SalesGroupKey = "main" | "rest";
-export const salesGroups: {
-  key: SalesGroupKey;
+export type SalesGroupKey = "piese" | "utilaje" | "irigatii";
+export type GroupKey = SalesGroupKey | "unassigned";
+export interface SalesGroup {
+  key: GroupKey;
   label: string;
   /** For file names. */
   slug: string;
-}[] = [
-  { key: "main", label: "Grupa 1", slug: "grupa-1" },
-  { key: "rest", label: "Restul gestiunilor", slug: "restul-gestiunilor" },
+  warehouses: [id: number, name: string][];
+}
+export const salesGroups: SalesGroup[] = [
+  {
+    key: "piese",
+    label: "Piese",
+    slug: "piese",
+    warehouses: [
+      [1, "DEPOZIT VALEA SEACA"],
+      [2, "DEPOZIT IASI"],
+      [6, "DEPOZIT BRAILA"],
+      [9, "DEPOZIT FILIPESTI"],
+      [10, "DEPOZIT BOTOSANI"],
+      [14, "DEPOZIT VASLUI"],
+    ],
+  },
+  {
+    key: "utilaje",
+    label: "Utilaje",
+    slug: "utilaje",
+    warehouses: [
+      [8, "DEPOZIT UTILAJE"],
+      [16, "UTILAJE BRAILA"],
+      [17, "UTILAJE FILIPESTI"],
+      [18, "UTILAJE IASI"],
+      [19, "UTILAJE BOTOSANI"],
+      [20, "UTILAJE VASLUI"],
+    ],
+  },
+  {
+    key: "irigatii",
+    label: "Irigații",
+    slug: "irigatii",
+    warehouses: [[15, "DEPOZIT IRIGATII"]],
+  },
 ];
-const MAIN_GROUP_WAREHOUSES: ReadonlySet<number> = new Set([
-  1, // DEPOZIT VALEA SEACA
-  6, // DEPOZIT BRAILA
-  8, // DEPOZIT UTILAJE
-  14, // DEPOZIT VASLUI
-  17, // UTILAJE FILIPESTI
-  18, // UTILAJE IASI
-  19, // UTILAJE BOTOSANI
-]);
+export const unassignedGroup: SalesGroup = {
+  key: "unassigned",
+  label: "Nealocate",
+  slug: "nealocate",
+  warehouses: [],
+};
+/** Every group a view can show. */
+export const groupChoices = [...salesGroups, unassignedGroup];
 
 /**
  * Ledger accounts requested from Borg, one request each. A request matches an
@@ -165,14 +199,18 @@ export function normalizeEntries(
 // ---------------------------------------------------------------------------
 // Gestiune groups
 
-export type GroupFilter = SalesGroupKey | "all";
+export type GroupFilter = GroupKey | "all";
 
-export const salesGroupOf = (
-  entry: Pick<SaleEntry, "warehouseId">,
-): SalesGroupKey =>
-  entry.warehouseId !== null && MAIN_GROUP_WAREHOUSES.has(entry.warehouseId)
-    ? "main"
-    : "rest";
+const groupOfWarehouse = new Map(
+  salesGroups.flatMap((group) =>
+    group.warehouses.map(([id]) => [id, group.key] as const),
+  ),
+);
+
+export const salesGroupOf = (entry: Pick<SaleEntry, "warehouseId">): GroupKey =>
+  (entry.warehouseId === null
+    ? undefined
+    : groupOfWarehouse.get(entry.warehouseId)) ?? "unassigned";
 
 export const inGroup = <T extends Pick<SaleEntry, "warehouseId">>(
   entries: T[],

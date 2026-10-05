@@ -12,7 +12,7 @@ import {
   metricOptions,
   SALES_ACCOUNTS,
   SALES_ENTITY,
-  salesGroups,
+  groupChoices,
   summarize,
 } from "../lib/sales";
 import type { MetricKey } from "../lib/sales";
@@ -138,7 +138,7 @@ function SalesDashboard({
   const current = data.status === "error" ? undefined : data.current;
   const previous = state.compare ? data.previous : undefined;
   // The group is a view over the loaded period, so switching never refetches.
-  const group = salesGroups.find((item) => item.key === state.group);
+  const group = groupChoices.find((item) => item.key === state.group);
   const entries = useMemo(
     () => (current ? inGroup(current.entries, state.group) : []),
     [current, state.group],
@@ -280,7 +280,7 @@ function SalesDashboard({
                 <section className="panel">
                   <EmptyState
                     icon={CircleOff}
-                    title={`Nicio vânzare în ${group?.label.toLowerCase()}`}
+                    title={`Nicio vânzare în grupa „${group?.label}”`}
                     action={
                       <button
                         className="button button-secondary"

@@ -2,15 +2,18 @@ import { describe, expect, it } from "vitest";
 import {
   composition,
   discountPct,
+  groupChoices,
   groupEntries,
   inGroup,
   normalizeEntries,
   normalizeEntry,
   salesAfterDiscounts,
   salesGroupOf,
+  salesGroups,
   summarize,
   timeSeries,
 } from "./sales";
+import type { GroupFilter } from "./sales";
 
 // Shaped like live Borg ledger entries; every value is invented.
 let nextId = 1;
@@ -371,29 +374,50 @@ describe("timeSeries", () => {
 });
 
 describe("gestiune groups", () => {
+  const ids = {
+    piese: [1, 2, 6, 9, 10, 14],
+    utilaje: [8, 16, 17, 18, 19, 20],
+    irigatii: [15],
+    unassigned: [3, 4, 5, 7, 11, 13, 99, null],
+  };
   const entries = normalize(
-    [1, 6, 8, 14, 17, 18, 19, 2, 9, 10, 16, 20, 7, 15, null].map((gestiuneId) =>
-      sale({ gestiuneId, depozit: gestiuneId && `G${gestiuneId}`, suma: 10 }),
-    ),
+    Object.values(ids)
+      .flat()
+      .map((gestiuneId) =>
+        sale({ gestiuneId, depozit: gestiuneId && `G${gestiuneId}`, suma: 10 }),
+      ),
   );
+  const idsOf = (group: GroupFilter) =>
+    inGroup(entries, group).map((item) => item.warehouseId);
 
-  it("puts group 1's gestiuni in group 1 and everything else in the rest", () => {
-    const names = (group: "main" | "rest") =>
-      inGroup(entries, group).map((item) => item.warehouseId);
-    expect(names("main")).toEqual([1, 6, 8, 14, 17, 18, 19]);
-    expect(names("rest")).toEqual([2, 9, 10, 16, 20, 7, 15, null]);
+  it("puts each listed gestiune in its group", () => {
+    expect(idsOf("piese")).toEqual(ids.piese);
+    expect(idsOf("utilaje")).toEqual(ids.utilaje);
+    expect(idsOf("irigatii")).toEqual(ids.irigatii);
   });
 
-  it("keeps entries without a gestiune in the rest", () => {
-    expect(salesGroupOf({ warehouseId: null })).toBe("rest");
+  it("leaves unlisted gestiuni and entries without one unassigned", () => {
+    expect(idsOf("unassigned")).toEqual(ids.unassigned);
+    expect(salesGroupOf({ warehouseId: null })).toBe("unassigned");
+    expect(salesGroupOf({ warehouseId: 99 })).toBe("unassigned");
   });
 
-  it("splits the sales exactly, with nothing counted in both or neither", () => {
+  it("lists every gestiune in at most one group", () => {
+    const listed = salesGroups.flatMap((group) =>
+      group.warehouses.map(([id]) => id),
+    );
+    expect(new Set(listed).size).toBe(listed.length);
+  });
+
+  it("splits the sales exactly, with nothing counted in two groups or none", () => {
     const total = summarize(entries);
-    const main = summarize(inGroup(entries, "main"));
-    const rest = summarize(inGroup(entries, "rest"));
-    expect(main.sales + rest.sales).toBe(total.sales);
-    expect(main.entries + rest.entries).toBe(total.entries);
+    const parts = groupChoices.map((group) =>
+      summarize(inGroup(entries, group.key)),
+    );
+    expect(parts.reduce((sum, part) => sum + part.sales, 0)).toBe(total.sales);
+    expect(parts.reduce((sum, part) => sum + part.entries, 0)).toBe(
+      total.entries,
+    );
     expect(inGroup(entries, "all")).toBe(entries);
   });
 });

@@ -5,6 +5,7 @@ import {
   salesAfterDiscounts,
   salesGroups,
   summarize,
+  unassignedGroup,
 } from "../../lib/sales";
 import type { GroupFilter, SaleEntry } from "../../lib/sales";
 
@@ -25,6 +26,12 @@ export function GroupTabs({
   const { compactMoney } = useCurrency();
   const total = (group: GroupFilter) =>
     compactMoney(salesAfterDiscounts(summarize(inGroup(entries, group))));
+  // Only worth a tab when something is unassigned (or it was asked for).
+  const groups =
+    value === unassignedGroup.key ||
+    inGroup(entries, unassignedGroup.key).length
+      ? [...salesGroups, unassignedGroup]
+      : salesGroups;
   return (
     <Segmented<GroupFilter>
       label="Grupă de gestiuni"
@@ -32,7 +39,7 @@ export function GroupTabs({
       onChange={onChange}
       options={[
         { value: "all", label: `Toate · ${total("all")}` },
-        ...salesGroups.map((group) => ({
+        ...groups.map((group) => ({
           value: group.key,
           label: `${group.label} · ${total(group.key)}`,
         })),
