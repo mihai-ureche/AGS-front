@@ -71,7 +71,16 @@ categories, clients, operators, VAT or margin to break sales down by.
 - **Measure:** sales after discounts, sales, discounts or documents. The choice drives the trend and the gestiune share. The trend can be split by gestiune (top three).
 - **Documents** counts distinct `documentId` of sale entries. A document can have entries in several gestiuni, so the rows may add up to more than the total.
 
-**Accuracy:** for September 1–29, 2026, gestiuni 1, 2, 6, 9, 10 and 14, the ledger gives 5,419,073.77 lei in sales and 228,921.11 lei in discounts, against 5,387,882.17 and 227,735.06 in Borg's sales report (0.6% and 0.5% higher). Only about half of the report's documents appear in the ledger's 707 entries, and the ledger has others the report lacks, so the two document sets differ for reasons not yet found. Treat the dashboard as the ledger's view of sales, not as a copy of that report.
+**Accuracy:** the dashboard uses live accounting ledger entries. The saved September 2026 Piese sales report covers **September 1–29**, rather than the full month, and uses a different document set. Its CSV exports sum to 5,387,882.17 lei in sales and 227,735.06 lei in discounts; the supplied business figures are 5,387,882.07 and 227,735.00. These are report references, not expected totals for the live full-month ledger.
+
+Verified against live Borg on October 5, 2026, through the frontend loader, normalization and Piese warehouse filter (IDs 1, 2, 6, 9, 10, 14):
+
+| Period | Sales (lei) | Discounts (lei) | Sales after discounts (lei) |
+| --- | ---: | ---: | ---: |
+| September 1–29, 2026 | 5,419,073.77 | 228,921.11 | 5,190,152.66 |
+| September 1–30, 2026 | 6,045,987.05 | 229,545.15 | 5,816,441.90 |
+
+Both full-month account responses reported `meta.truncated: false`, and the frontend ignored no entries. **Luna trecută**, when selected in October 2026, requests September 1–30. The heading identifies the accounting ledger as the source; no report snapshot or adjustment is substituted for live data. Live values can change when ledger entries are added or corrected.
 
 **Access:** the backend needs `sales:read`, a grant for Agritehnica and a role with access to all revenue groups (`salesGroups: null`). Ledger entries have no category, so roles limited to some groups get `403`; the page explains this instead of requesting data.
 

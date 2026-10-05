@@ -174,7 +174,7 @@ function SalesDashboard({
   return (
     <>
       <SalesHeading
-        subtitle={`${entityLabels[SALES_ENTITY]} · ${rangeLabel}${group ? ` · ${group.label}` : ""}`}
+        subtitle={`Registrul contabil Borg · ${entityLabels[SALES_ENTITY]} · ${rangeLabel}${group ? ` · ${group.label}` : ""}`}
         status={status}
         actions={<CurrencyControl />}
       />
